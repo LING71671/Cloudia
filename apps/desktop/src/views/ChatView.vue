@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onUnmounted } from 'vue';
+import { ref, computed, onUnmounted, nextTick } from 'vue';
 import { useRouter } from 'vue-router';
 import { useChatStore } from '@/stores/chat';
 import { useConnectionStore } from '@/stores/connection';
@@ -21,80 +21,163 @@ const settings = useSettingsStore();
 const identity = useIdentityStore();
 const router = useRouter();
 const {
+  peers,
+  peerStreams,
   localStream,
-  remoteStream,
-  pc,
+  callMode,
   createPeerConnection,
   createOffer,
   handleOffer,
   handleAnswer,
   addIceCandidate,
+  getPeerConnection,
   startLocalStream,
+  removePeer,
   cleanup: cleanupRTC,
 } = useWebRTC();
 
-const inCall = ref(false);
 const localVideoRef = ref<HTMLVideoElement | null>(null);
-const remoteVideoRef = ref<HTMLVideoElement | null>(null);
+const callDuration = ref(0);
+let callTimer: ReturnType<typeof setInterval> | null = null;
+
+// Grid columns based on participant count
+const gridClass = computed(() => {
+  const count = peerStreams.value.length;
+  if (count <= 1) return 'grid-cols-1';
+  if (count <= 2) return 'grid-cols-2';
+  return 'grid-cols-2';
+});
 
 // Handle WebRTC signaling messages
 const unsubSignaling = connection.onMessage(async (msg) => {
   if (msg.from === identity.clientId) return;
 
   if (msg.type === 'offer') {
-    const payload = msg.payload as { sdp: string };
-    if (!pc.value) await createPeerConnection();
-    await startLocalStream(true, true);
-    bindStreams();
-    const answer = await handleOffer(payload.sdp);
+    const payload = msg.payload as { sdp: string; callMode?: string };
+    await startLocalStream(
+      callMode.value === 'video' || payload.callMode === 'video',
+      true,
+    );
+    if (payload.callMode && callMode.value === 'none') {
+      callMode.value = payload.callMode as 'video' | 'voice';
+      startCallTimer();
+    }
+    const answer = await handleOffer(msg.from, payload.sdp);
     await chat.sendMessage('answer', { sdp: answer.sdp });
     setupIceTrickle(msg.from);
-    inCall.value = true;
+    bindLocalVideo();
   } else if (msg.type === 'answer') {
     const payload = msg.payload as { sdp: string };
-    await handleAnswer(payload.sdp);
+    await handleAnswer(msg.from, payload.sdp);
   } else if (msg.type === 'ice-candidate') {
     const payload = msg.payload as { candidate: RTCIceCandidateInit };
-    await addIceCandidate(payload.candidate);
+    await addIceCandidate(msg.from, payload.candidate);
+  } else if (msg.type === 'leave') {
+    removePeer(msg.from);
   }
 });
 
 function setupIceTrickle(peerId: string) {
-  if (!pc.value) return;
-  pc.value.addEventListener('icecandidate', (event) => {
+  const pc = getPeerConnection(peerId);
+  if (!pc) return;
+  pc.addEventListener('icecandidate', (event) => {
     if (event.candidate) {
       chat.sendMessage('ice-candidate', { candidate: event.candidate.toJSON() });
     }
   });
 }
 
-function bindStreams() {
-  if (localVideoRef.value && localStream.value) {
-    localVideoRef.value.srcObject = localStream.value;
-  }
-  // remoteStream is populated via 'track' event in useWebRTC
-  if (remoteVideoRef.value && remoteStream.value) {
-    remoteVideoRef.value.srcObject = remoteStream.value;
-  }
+function bindLocalVideo() {
+  nextTick(() => {
+    if (localVideoRef.value && localStream.value) {
+      localVideoRef.value.srcObject = localStream.value;
+    }
+  });
 }
 
-async function startCall() {
-  await createPeerConnection();
+function startCallTimer() {
+  callDuration.value = 0;
+  callTimer = setInterval(() => callDuration.value++, 1000);
+}
+
+function formatDuration(seconds: number): string {
+  const m = Math.floor(seconds / 60).toString().padStart(2, '0');
+  const s = (seconds % 60).toString().padStart(2, '0');
+  return `${m}:${s}`;
+}
+
+
+async function startVideoCall() {
+  callMode.value = 'video';
   await startLocalStream(true, true);
-  bindStreams();
-  const offer = await createOffer();
-  await chat.sendMessage('offer', { sdp: offer.sdp });
-  setupIceTrickle('');
-  inCall.value = true;
+  bindLocalVideo();
+  await broadcastOffer();
+  startCallTimer();
+}
+
+async function startVoiceCall() {
+  callMode.value = 'voice';
+  await startLocalStream(false, true);
+  await broadcastOffer();
+  startCallTimer();
+}
+
+async function broadcastOffer() {
+  // Create a peer connection and send offer (peers will respond)
+  // For mesh: each new joiner sends offer to all existing participants
+  // The server's member list system message tells us who's in the room
+  const offer = await createOffer('__broadcast__');
+  await chat.sendMessage('offer', { sdp: offer.sdp, callMode: callMode.value });
 }
 
 function endCall() {
+  if (callTimer) {
+    clearInterval(callTimer);
+    callTimer = null;
+  }
   cleanupRTC();
-  inCall.value = false;
 }
 
 function handleSend(content: string) {
   chat.sendText(content);
+}
+
+async function handleSendImage(file: File) {
+  const res = await fetch(`${settings.restEndpoint}/api/media/upload`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': file.type,
+      'X-Client-ID': identity.clientId,
+    },
+    body: file,
+  });
+  if (!res.ok) return;
+  const { url } = await res.json();
+  await chat.sendMessage('image', {
+    url: `${settings.restEndpoint}${url}`,
+    filename: file.name,
+    size: file.size,
+    mimeType: file.type,
+  });
+}
+
+async function handleSendAudio(blob: Blob, duration: number) {
+  const res = await fetch(`${settings.restEndpoint}/api/media/upload`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': blob.type || 'audio/webm',
+      'X-Client-ID': identity.clientId,
+    },
+    body: blob,
+  });
+  if (!res.ok) return;
+  const { url } = await res.json();
+  await chat.sendMessage('audio', {
+    url: `${settings.restEndpoint}${url}`,
+    duration,
+    size: blob.size,
+    mimeType: blob.type || 'audio/webm',
+  });
 }
 
 const linkCopied = ref(false);
@@ -152,19 +235,31 @@ onUnmounted(() => {
           <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" />
         </svg>
       </button>
-      <!-- Call button -->
+      <!-- Voice call button -->
       <button
-        v-if="!inCall"
+        v-if="callMode === 'none'"
         class="p-2 rounded-lg text-gray-500 hover:bg-gray-100 ghost:text-ghost-text/60 ghost:hover:bg-ghost-muted"
-        title="Start call"
-        @click="startCall"
+        title="Voice call"
+        @click="startVoiceCall"
+      >
+        <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
+        </svg>
+      </button>
+      <!-- Video call button -->
+      <button
+        v-if="callMode === 'none'"
+        class="p-2 rounded-lg text-gray-500 hover:bg-gray-100 ghost:text-ghost-text/60 ghost:hover:bg-ghost-muted"
+        title="Video call"
+        @click="startVideoCall"
       >
         <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
           <path stroke-linecap="round" stroke-linejoin="round" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
         </svg>
       </button>
+      <!-- End call button -->
       <button
-        v-else
+        v-if="callMode !== 'none'"
         class="p-2 rounded-lg bg-red-500 text-white hover:bg-red-600"
         title="End call"
         @click="endCall"
@@ -176,22 +271,49 @@ onUnmounted(() => {
     </div>
 
     <!-- Video call area -->
-    <div v-if="inCall" class="relative bg-black h-48 shrink-0">
-      <video
-        ref="remoteVideoRef"
-        autoplay
-        playsinline
-        class="w-full h-full object-cover"
-        :srcObject="remoteStream ?? undefined"
-      />
+    <div v-if="callMode === 'video'" class="relative bg-black shrink-0 aspect-video max-h-[60vh]">
+      <!-- Remote video grid -->
+      <div class="w-full h-full grid gap-1" :class="gridClass">
+        <div
+          v-for="[peerId, peer] in peerStreams"
+          :key="peerId"
+          class="relative bg-gray-900"
+        >
+          <video
+            autoplay
+            playsinline
+            class="w-full h-full object-contain"
+            :srcObject="peer.stream"
+          />
+          <span class="absolute bottom-1 left-2 text-xs text-white/70 bg-black/40 px-1.5 py-0.5 rounded">
+            {{ peerId.slice(0, 8) }}
+          </span>
+        </div>
+        <div v-if="peerStreams.length === 0" class="flex items-center justify-center text-white/40 text-sm">
+          Waiting for others to join...
+        </div>
+      </div>
+      <!-- Local video PiP -->
       <video
         ref="localVideoRef"
         autoplay
         playsinline
         muted
-        class="absolute bottom-2 right-2 w-24 h-18 rounded-lg object-cover border-2 border-white/30"
+        class="absolute bottom-3 right-3 w-32 h-24 rounded-lg object-cover border-2 border-white/30 shadow-lg"
         :srcObject="localStream ?? undefined"
       />
+    </div>
+
+    <!-- Voice call area -->
+    <div v-if="callMode === 'voice'" class="flex items-center justify-center gap-4 py-4 bg-gray-50 ghost:bg-ghost-muted border-b border-gray-200 ghost:border-ghost-muted shrink-0">
+      <div class="flex items-center gap-2">
+        <div class="w-3 h-3 bg-green-500 rounded-full animate-pulse" />
+        <span class="text-sm text-gray-600 ghost:text-ghost-text/60">Voice call</span>
+      </div>
+      <span class="text-sm font-mono text-gray-500">{{ formatDuration(callDuration) }}</span>
+      <span class="text-xs text-gray-400">
+        {{ peerStreams.length }} participant{{ peerStreams.length !== 1 ? 's' : '' }}
+      </span>
     </div>
 
     <!-- Ghost mode banner -->
@@ -201,6 +323,7 @@ onUnmounted(() => {
     <MessageList :messages="chat.messages" />
 
     <!-- Input -->
-    <MessageInput @send="handleSend" />
+    <MessageInput @send="handleSend" @send-image="handleSendImage" @send-audio="handleSendAudio" />
   </div>
 </template>
+

@@ -9,9 +9,13 @@ bindings = [
 
 [[migrations]]
 tag = "v1"
-new_classes = ["ChatRoom"]
+new_sqlite_classes = ["ChatRoom"]
 
 [[d1_databases]]
 binding = "DB"
 database_name = "cloudia-db"
-database_id = "placeholder-replace-after-create"
+database_id = "46899f2e-3753-4465-bc78-c2f6e6cc36b5"
+
+[[r2_buckets]]
+binding = "MEDIA"
+bucket_name = "cloudia-media"

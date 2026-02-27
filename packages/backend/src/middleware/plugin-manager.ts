@@ -1,9 +1,10 @@
-import type { MessageEnvelope } from '@cloudia/shared';
+import type { MessageEnvelope, RoomAccessLevel } from '@cloudia/shared';
 
 export interface PluginContext {
   ws: WebSocket;
   roomId: string;
   roomMode: 'standard' | 'ephemeral';
+  accessLevel: RoomAccessLevel;
 }
 
 export interface Plugin {

@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia';
 import { ref } from 'vue';
-import type { MessageEnvelope, RoomInfo, RoomMode } from '@cloudia/shared';
+import type { MessageEnvelope, RoomInfo, RoomMode, RoomAccessLevel } from '@cloudia/shared';
 import { canonicalize, signPayload } from '@cloudia/crypto';
 import { useIdentityStore } from './identity';
 import { useConnectionStore } from './connection';
@@ -65,7 +65,11 @@ export const useChatStore = defineStore('chat', () => {
     }
   }
 
-  async function createRoom(name: string, mode: RoomMode) {
+  async function createRoom(
+    name: string,
+    mode: RoomMode,
+    options?: { accessLevel?: RoomAccessLevel; password?: string; participants?: [string, string] },
+  ) {
     const settings = useSettingsStore();
     const publicKey = await identity.getPublicKeyJwk();
     const res = await fetch(`${settings.restEndpoint}/api/rooms`, {
@@ -74,7 +78,14 @@ export const useChatStore = defineStore('chat', () => {
         'Content-Type': 'application/json',
         'X-Client-ID': identity.clientId,
       },
-      body: JSON.stringify({ name, mode, ownerPublicKey: publicKey }),
+      body: JSON.stringify({
+        name,
+        mode,
+        ownerPublicKey: publicKey,
+        accessLevel: options?.accessLevel,
+        password: options?.password,
+        participants: options?.participants,
+      }),
     });
     const data = await res.json();
     if (data.room) {
@@ -84,7 +95,7 @@ export const useChatStore = defineStore('chat', () => {
     throw new Error(data.error ?? 'Failed to create room');
   }
 
-  async function joinRoom(room: RoomInfo) {
+  async function joinRoom(room: RoomInfo, options?: { password?: string; accessToken?: string }) {
     currentRoom.value = room;
     messages.value = [];
 
@@ -94,7 +105,11 @@ export const useChatStore = defineStore('chat', () => {
       ephemeralPubKey = await e2ee.initialize();
     }
 
-    connection.connect(room.id, room.mode, room.name);
+    connection.connect(room.id, room.mode, room.name, {
+      password: options?.password,
+      accessToken: options?.accessToken,
+      clientId: identity.clientId,
+    });
 
     // Wait for connection, then send join message
     const unwatch = connection.onMessage(async () => {});
@@ -113,6 +128,11 @@ export const useChatStore = defineStore('chat', () => {
         encryptedSessionKey: '',
         ephemeralPublicKey: ephemeralPubKey,
       });
+    }
+
+    // Fetch message history for standard rooms
+    if (room.mode === 'standard') {
+      await fetchHistory(room.id);
     }
   }
 
@@ -158,8 +178,34 @@ export const useChatStore = defineStore('chat', () => {
     connection.send(envelope);
 
     // Add to local messages (optimistic)
-    if (type === 'text' || type === 'ephemeral-text') {
+    if (type === 'text' || type === 'ephemeral-text' || type === 'image' || type === 'audio') {
       messages.value.push(envelope);
+    }
+  }
+
+  async function fetchHistory(roomId: string) {
+    const settings = useSettingsStore();
+    try {
+      const res = await fetch(`${settings.restEndpoint}/api/rooms/${roomId}/messages`);
+      if (!res.ok) return;
+      const data = await res.json();
+      const history: MessageEnvelope[] = (data.messages ?? [])
+        .map((row: any) => ({
+          id: row.id,
+          type: row.type as MessageEnvelope['type'],
+          from: row.sender_id,
+          roomId: row.room_id,
+          timestamp: row.timestamp,
+          signature: row.signature,
+          payload: typeof row.content === 'string' ? JSON.parse(row.content) : row.content,
+        }))
+        .reverse(); // DB returns DESC, we need chronological
+      // Deduplicate against real-time messages
+      const existingIds = new Set(messages.value.map((m) => m.id));
+      const uniqueHistory = history.filter((m) => !existingIds.has(m.id));
+      messages.value = [...uniqueHistory, ...messages.value];
+    } catch {
+      // Non-critical
     }
   }
 
@@ -180,6 +226,25 @@ export const useChatStore = defineStore('chat', () => {
     });
   }
 
+  async function startDm(targetClientId: string) {
+    const room = await createRoom('DM', 'standard', {
+      accessLevel: 'dm',
+      participants: [identity.clientId, targetClientId],
+    });
+    await joinRoom(room);
+    return room;
+  }
+
+  async function joinByShortCode(code: string, password?: string) {
+    const settings = useSettingsStore();
+    const res = await fetch(`${settings.restEndpoint}/api/rooms/code/${code.toUpperCase()}`);
+    if (!res.ok) throw new Error('Room not found');
+    const data = await res.json();
+    const room = data.room as RoomInfo;
+    await joinRoom(room, { password });
+    return room;
+  }
+
   return {
     rooms,
     messages,
@@ -191,5 +256,8 @@ export const useChatStore = defineStore('chat', () => {
     leaveRoom,
     sendText,
     sendMessage,
+    fetchHistory,
+    startDm,
+    joinByShortCode,
   };
 });

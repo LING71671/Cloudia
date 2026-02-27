@@ -5,7 +5,7 @@ import { parseInviteParams } from '@/utils/invite';
 import { useSettingsStore } from '@/stores/settings';
 import { useChatStore } from '@/stores/chat';
 import { useIdentityStore } from '@/stores/identity';
-import type { RoomMode } from '@cloudia/shared';
+import type { RoomMode, RoomAccessLevel } from '@cloudia/shared';
 
 const router = useRouter();
 const settings = useSettingsStore();
@@ -40,12 +40,16 @@ onMounted(async () => {
       id: params.roomId,
       name: params.roomName ?? 'Invited Room',
       mode: (params.mode ?? 'standard') as RoomMode,
+      accessLevel: (params.accessLevel ?? 'public') as RoomAccessLevel,
+      shortCode: '',
       createdAt: Date.now(),
       ownerClientId: '',
       memberCount: 0,
     };
 
-    await chat.joinRoom(room);
+    await chat.joinRoom(room, {
+      accessToken: params.accessToken ?? undefined,
+    });
     router.replace({ name: 'chat', params: { roomId: room.id } });
   } catch (e) {
     error.value = `Failed to join room: ${e instanceof Error ? e.message : 'Unknown error'}`;

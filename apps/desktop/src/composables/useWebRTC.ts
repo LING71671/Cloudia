@@ -1,11 +1,18 @@
 import { useSettingsStore } from '@/stores/settings';
 import type { IceServersResponse } from '@cloudia/shared';
-import { ref, onUnmounted } from 'vue';
+import { ref, onUnmounted, computed } from 'vue';
+
+export interface PeerState {
+  pc: RTCPeerConnection;
+  stream: MediaStream;
+}
 
 export function useWebRTC() {
-  const pc = ref<RTCPeerConnection | null>(null);
+  const peers = ref<Map<string, PeerState>>(new Map());
   const localStream = ref<MediaStream | null>(null);
-  const remoteStream = ref<MediaStream | null>(null);
+  const callMode = ref<'none' | 'video' | 'voice'>('none');
+
+  const peerStreams = computed(() => Array.from(peers.value.entries()));
 
   async function fetchIceServers(): Promise<RTCIceServer[]> {
     const settings = useSettingsStore();
@@ -18,74 +25,116 @@ export function useWebRTC() {
     }
   }
 
-  async function createPeerConnection(): Promise<RTCPeerConnection> {
+  async function createPeerConnection(peerId: string): Promise<RTCPeerConnection> {
     const iceServers = await fetchIceServers();
-    const connection = new RTCPeerConnection({ iceServers });
+    const pc = new RTCPeerConnection({ iceServers });
 
-    connection.addEventListener('track', (event) => {
-      if (!remoteStream.value) {
-        remoteStream.value = new MediaStream();
-      }
-      remoteStream.value.addTrack(event.track);
+    const stream = new MediaStream();
+    pc.addEventListener('track', (event) => {
+      stream.addTrack(event.track);
+      // Trigger reactivity
+      peers.value = new Map(peers.value);
     });
 
-    pc.value = connection;
-    return connection;
+    // Add local tracks to this connection
+    if (localStream.value) {
+      for (const track of localStream.value.getTracks()) {
+        pc.addTrack(track, localStream.value);
+      }
+    }
+
+    peers.value.set(peerId, { pc, stream });
+    peers.value = new Map(peers.value);
+    return pc;
   }
 
-  async function createOffer(): Promise<RTCSessionDescriptionInit> {
-    if (!pc.value) await createPeerConnection();
-    const offer = await pc.value!.createOffer();
-    await pc.value!.setLocalDescription(offer);
+  async function createOffer(peerId: string): Promise<RTCSessionDescriptionInit> {
+    let peer = peers.value.get(peerId);
+    if (!peer) {
+      await createPeerConnection(peerId);
+      peer = peers.value.get(peerId)!;
+    }
+    const offer = await peer.pc.createOffer();
+    await peer.pc.setLocalDescription(offer);
     return offer;
   }
 
-  async function handleOffer(sdp: string): Promise<RTCSessionDescriptionInit> {
-    if (!pc.value) await createPeerConnection();
-    await pc.value!.setRemoteDescription({ type: 'offer', sdp });
-    const answer = await pc.value!.createAnswer();
-    await pc.value!.setLocalDescription(answer);
+  async function handleOffer(peerId: string, sdp: string): Promise<RTCSessionDescriptionInit> {
+    let peer = peers.value.get(peerId);
+    if (!peer) {
+      await createPeerConnection(peerId);
+      peer = peers.value.get(peerId)!;
+    }
+    await peer.pc.setRemoteDescription({ type: 'offer', sdp });
+    const answer = await peer.pc.createAnswer();
+    await peer.pc.setLocalDescription(answer);
     return answer;
   }
 
-  async function handleAnswer(sdp: string) {
-    await pc.value?.setRemoteDescription({ type: 'answer', sdp });
+  async function handleAnswer(peerId: string, sdp: string) {
+    const peer = peers.value.get(peerId);
+    if (peer) {
+      await peer.pc.setRemoteDescription({ type: 'answer', sdp });
+    }
   }
 
-  async function addIceCandidate(candidate: RTCIceCandidateInit) {
-    await pc.value?.addIceCandidate(candidate);
+  async function addIceCandidate(peerId: string, candidate: RTCIceCandidateInit) {
+    const peer = peers.value.get(peerId);
+    if (peer) {
+      await peer.pc.addIceCandidate(candidate);
+    }
   }
 
-  async function startLocalStream(video = true, audio = true) {
+  function getPeerConnection(peerId: string): RTCPeerConnection | null {
+    return peers.value.get(peerId)?.pc ?? null;
+  }
+
+  async function startLocalStream(video: boolean, audio: boolean) {
     localStream.value = await navigator.mediaDevices.getUserMedia({ video, audio });
-    if (pc.value) {
+    // Add tracks to all existing peer connections
+    for (const [, peer] of peers.value) {
       for (const track of localStream.value.getTracks()) {
-        pc.value.addTrack(track, localStream.value);
+        peer.pc.addTrack(track, localStream.value);
       }
     }
   }
 
+  function removePeer(peerId: string) {
+    const peer = peers.value.get(peerId);
+    if (peer) {
+      peer.stream.getTracks().forEach((t) => t.stop());
+      peer.pc.close();
+      peers.value.delete(peerId);
+      peers.value = new Map(peers.value);
+    }
+  }
+
   function cleanup() {
+    for (const [, peer] of peers.value) {
+      peer.stream.getTracks().forEach((t) => t.stop());
+      peer.pc.close();
+    }
+    peers.value = new Map();
     localStream.value?.getTracks().forEach((t) => t.stop());
-    remoteStream.value?.getTracks().forEach((t) => t.stop());
-    pc.value?.close();
-    pc.value = null;
     localStream.value = null;
-    remoteStream.value = null;
+    callMode.value = 'none';
   }
 
   onUnmounted(cleanup);
 
   return {
-    pc,
+    peers,
+    peerStreams,
     localStream,
-    remoteStream,
+    callMode,
     createPeerConnection,
     createOffer,
     handleOffer,
     handleAnswer,
     addIceCandidate,
+    getPeerConnection,
     startLocalStream,
+    removePeer,
     cleanup,
   };
 }

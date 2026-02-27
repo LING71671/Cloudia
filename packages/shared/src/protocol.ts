@@ -10,11 +10,14 @@ export type ClientID = string;
 // === Room ===
 
 export type RoomMode = 'standard' | 'ephemeral';
+export type RoomAccessLevel = 'public' | 'password' | 'private' | 'dm';
 
 export interface RoomInfo {
   id: string;
   name: string;
   mode: RoomMode;
+  accessLevel: RoomAccessLevel;
+  shortCode: string;
   createdAt: number;
   ownerClientId: ClientID;
   memberCount: number;
@@ -24,6 +27,8 @@ export interface RoomInfo {
 
 export type MessageType =
   | 'text'
+  | 'image'
+  | 'audio'
   | 'system'
   | 'join'
   | 'leave'
@@ -37,8 +42,15 @@ export type MessageType =
 
 export interface PayloadMap {
   'text': { content: string };
+  'image': { url: string; filename: string; size: number; mimeType: string };
+  'audio': { url: string; duration: number; size: number; mimeType: string };
   'system': { content: string; level: 'info' | 'warn' | 'error' };
-  'join': { displayName?: string; publicKey: JsonWebKey };
+  'join': {
+    displayName?: string;
+    publicKey: JsonWebKey;
+    accessToken?: string;
+    password?: string;
+  };
   'leave': { reason?: string };
   'offer': { sdp: string };
   'answer': { sdp: string };
@@ -69,7 +81,10 @@ export interface MessageEnvelope<T extends MessageType = MessageType> {
 export interface CreateRoomRequest {
   name: string;
   mode: RoomMode;
+  accessLevel?: RoomAccessLevel;
   ownerPublicKey: JsonWebKey;
+  password?: string;
+  participants?: [ClientID, ClientID];
 }
 
 export interface CreateRoomResponse {
@@ -82,4 +97,18 @@ export interface ListRoomsResponse {
 
 export interface IceServersResponse {
   iceServers: RTCIceServer[];
+}
+
+// === Invitation Token (for private rooms) ===
+
+export interface InvitationPayload {
+  roomId: string;
+  inviteeClientId?: string;
+  expiresAt: number;
+}
+
+export interface InvitationToken {
+  payload: InvitationPayload;
+  signature: string;
+  ownerPublicKey: JsonWebKey;
 }

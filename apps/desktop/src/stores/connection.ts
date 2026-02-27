@@ -6,6 +6,12 @@ import { useSettingsStore } from './settings';
 
 export type ConnectionState = 'disconnected' | 'connecting' | 'connected' | 'error';
 
+export interface ConnectOptions {
+  password?: string;
+  accessToken?: string;
+  clientId?: string;
+}
+
 export const useConnectionStore = defineStore('connection', () => {
   const ws = ref<WebSocket | null>(null);
   const state = ref<ConnectionState>('disconnected');
@@ -23,14 +29,18 @@ export const useConnectionStore = defineStore('connection', () => {
     return () => messageHandlers.delete(handler);
   }
 
-  function connect(roomId: string, mode: RoomMode = 'standard', roomName = '') {
+  function connect(roomId: string, mode: RoomMode = 'standard', roomName = '', options: ConnectOptions = {}) {
     disconnect();
     currentRoomId.value = roomId;
     currentRoomMode.value = mode;
     state.value = 'connecting';
 
     const settings = useSettingsStore();
-    const url = `${settings.wsEndpoint}/api/ws/${roomId}?mode=${mode}&name=${encodeURIComponent(roomName)}`;
+    const params = new URLSearchParams({ mode, name: roomName });
+    if (options.password) params.set('password', options.password);
+    if (options.accessToken) params.set('accessToken', options.accessToken);
+    if (options.clientId) params.set('clientId', options.clientId);
+    const url = `${settings.wsEndpoint}/api/ws/${roomId}?${params.toString()}`;
 
     const socket = new WebSocket(url);
     ws.value = socket;
@@ -54,7 +64,7 @@ export const useConnectionStore = defineStore('connection', () => {
     socket.addEventListener('close', () => {
       state.value = 'disconnected';
       ws.value = null;
-      scheduleReconnect(roomId, mode, roomName);
+      scheduleReconnect(roomId, mode, roomName, options);
     });
 
     socket.addEventListener('error', () => {
@@ -83,11 +93,11 @@ export const useConnectionStore = defineStore('connection', () => {
     }
   }
 
-  function scheduleReconnect(roomId: string, mode: RoomMode, roomName: string) {
+  function scheduleReconnect(roomId: string, mode: RoomMode, roomName: string, options: ConnectOptions = {}) {
     if (reconnectAttempt.value >= RECONNECT_INTERVALS_MS.length) return;
     const delay = RECONNECT_INTERVALS_MS[reconnectAttempt.value];
     reconnectAttempt.value++;
-    reconnectTimer = setTimeout(() => connect(roomId, mode, roomName), delay);
+    reconnectTimer = setTimeout(() => connect(roomId, mode, roomName, options), delay);
   }
 
   return {

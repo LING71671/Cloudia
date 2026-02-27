@@ -1,14 +1,17 @@
 <script setup lang="ts">
 import { onMounted } from 'vue';
 import { useRouter } from 'vue-router';
-import type { RoomInfo, RoomMode } from '@cloudia/shared';
+import type { RoomInfo, RoomMode, RoomAccessLevel } from '@cloudia/shared';
 import { useChatStore } from '@/stores/chat';
+import { useIdentityStore } from '@/stores/identity';
 import { useSettingsStore } from '@/stores/settings';
 import RoomList from '@/components/lobby/RoomList.vue';
 import CreateRoom from '@/components/lobby/CreateRoom.vue';
+import JoinByCode from '@/components/lobby/JoinByCode.vue';
 import IdentityBadge from '@/components/common/IdentityBadge.vue';
 
 const chat = useChatStore();
+const identity = useIdentityStore();
 const settings = useSettingsStore();
 const router = useRouter();
 
@@ -17,18 +20,31 @@ onMounted(() => {
   chat.fetchRooms();
 });
 
-async function handleCreate(name: string, mode: RoomMode) {
+async function handleCreate(name: string, mode: RoomMode, accessLevel: RoomAccessLevel, password?: string, dmTarget?: string) {
   try {
-    const room = await chat.createRoom(name, mode);
+    const room = await chat.createRoom(name, mode, {
+      accessLevel,
+      password,
+      participants: dmTarget ? [identity.clientId, dmTarget] : undefined,
+    });
     await handleJoin(room);
   } catch (e) {
     console.error('Failed to create room:', e);
   }
 }
 
-async function handleJoin(room: RoomInfo) {
-  await chat.joinRoom(room);
+async function handleJoin(room: RoomInfo, password?: string) {
+  await chat.joinRoom(room, { password });
   router.push({ name: 'chat', params: { roomId: room.id } });
+}
+
+async function handleJoinByCode(code: string) {
+  try {
+    const room = await chat.joinByShortCode(code);
+    router.push({ name: 'chat', params: { roomId: room.id } });
+  } catch (e) {
+    console.error('Failed to join by code:', e);
+  }
 }
 </script>
 
@@ -51,8 +67,9 @@ async function handleJoin(room: RoomInfo) {
           </button>
         </div>
       </div>
-      <div class="p-4">
+      <div class="p-4 space-y-3">
         <CreateRoom @create="handleCreate" />
+        <JoinByCode @join-by-code="handleJoinByCode" />
       </div>
       <div class="flex-1 overflow-y-auto px-2">
         <RoomList :rooms="chat.rooms" :loading="chat.loading" @join="handleJoin" />

@@ -17,10 +17,11 @@ export function useNotification() {
   async function notify(title: string, body: string) {
     if (isTauri) {
       try {
-        const mod = await import('@tauri-apps/plugin-notification' as string);
+        // Dynamic import hidden from Vite's static analysis — only resolves in Tauri runtime
+        const modPath = '@tauri-apps/plugin-notification';
+        const mod = await (new Function('p', 'return import(p)') as (p: string) => Promise<any>)(modPath);
         await mod.sendNotification({ title, body });
       } catch {
-        // Fallback to web notification
         fallbackWebNotification(title, body);
       }
     } else {

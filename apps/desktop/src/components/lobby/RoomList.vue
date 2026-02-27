@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { ref } from 'vue';
 import type { RoomInfo } from '@cloudia/shared';
 
 defineProps<{
@@ -7,8 +8,28 @@ defineProps<{
 }>();
 
 const emit = defineEmits<{
-  join: [room: RoomInfo];
+  join: [room: RoomInfo, password?: string];
 }>();
+
+const promptRoom = ref<RoomInfo | null>(null);
+const passwordInput = ref('');
+
+function handleClick(room: RoomInfo) {
+  if (room.accessLevel === 'password') {
+    promptRoom.value = room;
+    passwordInput.value = '';
+  } else {
+    emit('join', room);
+  }
+}
+
+function submitPassword() {
+  if (promptRoom.value && passwordInput.value) {
+    emit('join', promptRoom.value, passwordInput.value);
+    promptRoom.value = null;
+    passwordInput.value = '';
+  }
+}
 </script>
 
 <template>
@@ -21,7 +42,7 @@ const emit = defineEmits<{
       v-for="room in rooms"
       :key="room.id"
       class="w-full flex items-center gap-3 p-3 rounded-lg hover:bg-gray-100 transition-colors text-left"
-      @click="emit('join', room)"
+      @click="handleClick(room)"
     >
       <span
         class="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold text-white shrink-0"
@@ -30,12 +51,48 @@ const emit = defineEmits<{
         {{ room.name.charAt(0).toUpperCase() }}
       </span>
       <div class="flex-1 min-w-0">
-        <div class="text-sm font-medium text-gray-800 truncate">{{ room.name }}</div>
-        <div class="text-xs text-gray-400">
+        <div class="flex items-center gap-1.5 text-sm font-medium text-gray-800 truncate">
+          <!-- Lock icon for password rooms -->
+          <svg v-if="room.accessLevel === 'password'" class="w-3.5 h-3.5 text-gray-400 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+            <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
+            <path d="M7 11V7a5 5 0 0110 0v4" />
+          </svg>
+          <span class="truncate">{{ room.name }}</span>
+        </div>
+        <div class="text-xs text-gray-400 flex items-center gap-1">
           {{ room.mode === 'ephemeral' ? 'Ghost' : 'Standard' }}
           · {{ room.memberCount }} member{{ room.memberCount !== 1 ? 's' : '' }}
+          <span v-if="room.shortCode" class="font-mono text-gray-300 ml-1">{{ room.shortCode }}</span>
         </div>
       </div>
     </button>
+
+    <!-- Password prompt overlay -->
+    <div v-if="promptRoom" class="p-3 rounded-lg border border-gray-200 bg-gray-50 space-y-2">
+      <div class="text-xs text-gray-500">Enter password for <span class="font-medium text-gray-700">{{ promptRoom.name }}</span></div>
+      <form class="flex gap-2" @submit.prevent="submitPassword">
+        <input
+          v-model="passwordInput"
+          type="password"
+          placeholder="Password"
+          class="flex-1 px-3 py-1.5 rounded-lg border border-gray-300 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50"
+          autofocus
+        />
+        <button
+          type="submit"
+          :disabled="!passwordInput"
+          class="px-3 py-1.5 rounded-lg bg-primary text-white text-xs font-medium hover:bg-primary-hover disabled:opacity-40 transition-colors"
+        >
+          Join
+        </button>
+        <button
+          type="button"
+          class="px-3 py-1.5 rounded-lg border border-gray-300 text-xs text-gray-600 hover:bg-gray-100 transition-colors"
+          @click="promptRoom = null"
+        >
+          Cancel
+        </button>
+      </form>
+    </div>
   </div>
 </template>

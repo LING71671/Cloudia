@@ -1,5 +1,5 @@
 import { DurableObject } from 'cloudflare:workers';
-import type { MessageEnvelope, RoomMode } from '@cloudia/shared';
+import type { MessageEnvelope, RoomMode, RoomAccessLevel, InvitationToken } from '@cloudia/shared';
 import { EPHEMERAL_ROOM_TTL_MS } from '@cloudia/shared';
 import { PluginManager } from '../middleware/plugin-manager';
 import { rateLimiter } from '../middleware/plugins/rate-limiter';
@@ -14,6 +14,10 @@ interface SessionMeta {
 interface RoomState {
   mode: RoomMode;
   name: string;
+  accessLevel: RoomAccessLevel;
+  passwordHash?: string;
+  ownerPublicKey?: string;
+  dmParticipants?: [string, string];
 }
 
 export class ChatRoom extends DurableObject<{ DB: D1Database }> {
@@ -47,13 +51,32 @@ export class ChatRoom extends DurableObject<{ DB: D1Database }> {
     const mode = url.searchParams.get('mode') as RoomMode | null;
     const name = url.searchParams.get('name');
     if (!this.roomState && mode) {
-      this.roomState = { mode, name: name ?? 'Unnamed Room' };
+      this.roomState = {
+        mode,
+        name: name ?? 'Unnamed Room',
+        accessLevel: (url.searchParams.get('accessLevel') as RoomAccessLevel) ?? 'public',
+        passwordHash: url.searchParams.get('passwordHash') ?? undefined,
+        ownerPublicKey: url.searchParams.get('ownerPublicKey') ?? undefined,
+        dmParticipants: url.searchParams.get('dmParticipants')
+          ? JSON.parse(url.searchParams.get('dmParticipants')!)
+          : undefined,
+      };
       await this.ctx.storage.put('roomState', this.roomState);
     }
 
     const upgradeHeader = request.headers.get('Upgrade');
     if (upgradeHeader !== 'websocket') {
       return new Response('Expected WebSocket upgrade', { status: 426 });
+    }
+
+    // Authorize before accepting WebSocket
+    const password = url.searchParams.get('password');
+    const accessToken = url.searchParams.get('accessToken');
+    const clientId = url.searchParams.get('clientId');
+
+    const authResult = await this.authorize(password, accessToken, clientId);
+    if (!authResult.ok) {
+      return new Response(authResult.reason ?? 'Forbidden', { status: 403 });
     }
 
     const pair = new WebSocketPair();
@@ -88,6 +111,7 @@ export class ChatRoom extends DurableObject<{ DB: D1Database }> {
       ws,
       roomId,
       roomMode: this.roomState?.mode ?? 'standard' as const,
+      accessLevel: this.roomState?.accessLevel ?? 'public' as const,
     };
 
     // Run plugin before-hooks
@@ -102,6 +126,8 @@ export class ChatRoom extends DurableObject<{ DB: D1Database }> {
         await this.handleLeave(ws, msg);
         break;
       case 'text':
+      case 'image':
+      case 'audio':
         this.broadcast(msg, ws);
         if (this.roomState?.mode === 'standard') {
           this.persistMessage(msg);
@@ -166,6 +192,27 @@ export class ChatRoom extends DurableObject<{ DB: D1Database }> {
   // --- Private helpers ---
 
   private async handleJoin(ws: WebSocket, msg: MessageEnvelope<'join'>): Promise<void> {
+    // DM 2-person limit
+    if (this.roomState?.accessLevel === 'dm') {
+      const uniqueClients = new Set(
+        Array.from(this.sessions.values()).map((m) => m.clientId),
+      );
+      uniqueClients.add(msg.from);
+      if (uniqueClients.size > 2) {
+        ws.send(JSON.stringify({
+          id: crypto.randomUUID(),
+          type: 'system',
+          from: '__server__',
+          roomId: msg.roomId,
+          timestamp: Date.now(),
+          signature: '',
+          payload: { content: 'DM rooms are limited to 2 participants', level: 'error' },
+        }));
+        ws.close(4003, 'DM room full');
+        return;
+      }
+    }
+
     const meta: SessionMeta = {
       clientId: msg.from,
       displayName: msg.payload.displayName,
@@ -268,5 +315,100 @@ export class ChatRoom extends DurableObject<{ DB: D1Database }> {
     } catch (e) {
       console.error('Failed to persist message:', e);
     }
+  }
+
+  // --- Authorization ---
+
+  private async authorize(
+    password?: string | null,
+    accessToken?: string | null,
+    clientId?: string | null,
+  ): Promise<{ ok: boolean; reason?: string }> {
+    const level = this.roomState?.accessLevel ?? 'public';
+
+    switch (level) {
+      case 'public':
+        return { ok: true };
+
+      case 'password': {
+        if (!password) return { ok: false, reason: 'Password required' };
+        const hash = await this.hashString(password);
+        if (hash !== this.roomState?.passwordHash) {
+          return { ok: false, reason: 'Incorrect password' };
+        }
+        return { ok: true };
+      }
+
+      case 'private': {
+        if (!accessToken) return { ok: false, reason: 'Invitation token required' };
+        try {
+          const token: InvitationToken = JSON.parse(decodeURIComponent(accessToken));
+          const valid = await this.verifyInvitationToken(token, clientId);
+          if (!valid) return { ok: false, reason: 'Invalid or expired invitation' };
+          return { ok: true };
+        } catch {
+          return { ok: false, reason: 'Malformed invitation token' };
+        }
+      }
+
+      case 'dm': {
+        if (!clientId) return { ok: false, reason: 'Client ID required for DM' };
+        const participants = this.roomState?.dmParticipants;
+        if (!participants || !participants.includes(clientId)) {
+          return { ok: false, reason: 'Not a participant of this DM' };
+        }
+        return { ok: true };
+      }
+
+      default:
+        return { ok: false, reason: 'Unknown access level' };
+    }
+  }
+
+  private async hashString(input: string): Promise<string> {
+    const encoded = new TextEncoder().encode(input);
+    const hash = await crypto.subtle.digest('SHA-256', encoded);
+    return Array.from(new Uint8Array(hash))
+      .map((b) => b.toString(16).padStart(2, '0'))
+      .join('');
+  }
+
+  private async verifyInvitationToken(
+    token: InvitationToken,
+    clientId?: string | null,
+  ): Promise<boolean> {
+    if (token.payload.expiresAt < Date.now()) return false;
+
+    if (token.payload.inviteeClientId && token.payload.inviteeClientId !== clientId) {
+      return false;
+    }
+
+    // Verify owner public key matches stored room owner
+    const storedOwnerJwk = this.roomState?.ownerPublicKey;
+    if (storedOwnerJwk) {
+      const storedJwk = JSON.parse(storedOwnerJwk);
+      if (storedJwk.x !== token.ownerPublicKey.x || storedJwk.y !== token.ownerPublicKey.y) {
+        return false;
+      }
+    }
+
+    const publicKey = await crypto.subtle.importKey(
+      'jwk',
+      token.ownerPublicKey,
+      { name: 'ECDSA', namedCurve: 'P-384' },
+      false,
+      ['verify'],
+    );
+
+    const data = new TextEncoder().encode(
+      JSON.stringify(token.payload, Object.keys(token.payload).sort()),
+    );
+    const sigBytes = Uint8Array.from(atob(token.signature), (c) => c.charCodeAt(0));
+    return crypto.subtle.verify(
+      { name: 'ECDSA', hash: 'SHA-384' },
+      publicKey,
+      sigBytes.buffer as ArrayBuffer,
+      data.buffer as ArrayBuffer,
+    );
   }
 }

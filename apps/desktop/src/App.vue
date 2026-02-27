@@ -17,7 +17,7 @@ onMounted(async () => {
     class="h-screen flex flex-col bg-gray-50 text-gray-900"
     :class="{ 'ghost-mode': connection.currentRoomMode === 'ephemeral' }"
   >
-    <ConnectionStatus />
+    <ConnectionStatus v-if="connection.currentRoomId" />
     <router-view class="flex-1 overflow-hidden" />
   </div>
 </template>
