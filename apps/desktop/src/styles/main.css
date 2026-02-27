@@ -1,0 +1,12 @@
+@import "tailwindcss";
+
+@custom-variant ghost (.ghost-mode &);
+
+@theme {
+  --color-ghost-bg: #0a0a0a;
+  --color-ghost-text: #39ff14;
+  --color-ghost-accent: #ff3131;
+  --color-ghost-muted: #1a1a2e;
+  --color-primary: #6366f1;
+  --color-primary-hover: #4f46e5;
+}

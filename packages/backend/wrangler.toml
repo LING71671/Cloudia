@@ -1,0 +1,17 @@
+name = "cloudia-api"
+main = "src/index.ts"
+compatibility_date = "2025-12-01"
+
+[durable_objects]
+bindings = [
+  { name = "CHAT_ROOM", class_name = "ChatRoom" }
+]
+
+[[migrations]]
+tag = "v1"
+new_classes = ["ChatRoom"]
+
+[[d1_databases]]
+binding = "DB"
+database_name = "cloudia-db"
+database_id = "placeholder-replace-after-create"
