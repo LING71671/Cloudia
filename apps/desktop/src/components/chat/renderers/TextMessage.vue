@@ -1,18 +1,24 @@
 <script setup lang="ts">
 import type { MessageEnvelope } from '@cloudia/shared';
 import { useIdentityStore } from '@/stores/identity';
+import { useChatStore } from '@/stores/chat';
+import { computed } from 'vue';
 
 const props = defineProps<{
   message: MessageEnvelope<'text'>;
 }>();
 
 const identity = useIdentityStore();
+const chat = useChatStore();
 const isSelf = props.message.from === identity.clientId;
+const senderLabel = computed(() =>
+  chat.memberNames[props.message.from] ?? props.message.from.slice(0, 8),
+);
 </script>
 
 <template>
   <div class="flex flex-col gap-1 w-full" :class="isSelf ? 'items-end' : 'items-start'">
-    <span v-if="!isSelf" class="text-[11px] text-gray-400/80 ghost:text-ghost-text/40 dark:text-gray-500 font-medium tracking-wide">{{ message.from.slice(0, 8) }}</span>
+    <span v-if="!isSelf" class="text-[11px] text-gray-400/80 ghost:text-ghost-text/40 dark:text-gray-500 font-medium tracking-wide">{{ senderLabel }}</span>
     <div
       class="px-4 py-2.5 rounded-2xl text-[15px] leading-relaxed break-words max-w-prose shadow-sm"
       :class="isSelf

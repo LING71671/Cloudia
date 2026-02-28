@@ -1,13 +1,17 @@
 <script setup lang="ts">
 import type { MessageEnvelope } from '@cloudia/shared';
+import { useChatStore } from '@/stores/chat';
+import { computed } from 'vue';
 
 const props = defineProps<{
   message: MessageEnvelope<'join'> | MessageEnvelope<'leave'>;
 }>();
 
-const label = props.message.type === 'join'
-  ? `${props.message.from.slice(0, 8)} joined`
-  : `${props.message.from.slice(0, 8)} left`;
+const chat = useChatStore();
+const label = computed(() => {
+  const name = chat.memberNames[props.message.from] ?? props.message.from.slice(0, 8);
+  return props.message.type === 'join' ? `${name} joined` : `${name} left`;
+});
 </script>
 
 <template>

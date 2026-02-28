@@ -1,11 +1,12 @@
 <script setup lang="ts">
-import { ref, onUnmounted, nextTick } from 'vue';
+import { ref, onMounted, onUnmounted, nextTick } from 'vue';
 import { useRouter } from 'vue-router';
 import { useChatStore } from '@/stores/chat';
 import { useConnectionStore } from '@/stores/connection';
 import { useSettingsStore } from '@/stores/settings';
 import { useIdentityStore } from '@/stores/identity';
 import { useWebRTC } from '@/composables/useWebRTC';
+import { useToast } from '@/composables/useToast';
 import { generateInviteLink } from '@/utils/invite';
 import { compressImage } from '@/utils/image-compress';
 import MessageList from '@/components/chat/MessageList.vue';
@@ -44,6 +45,7 @@ let callTimer: ReturnType<typeof setInterval> | null = null;
 
 // Handle WebRTC signaling messages and member tracking
 const unsubSignaling = connection.onMessage(async (msg) => {
+  try {
   // Track room members from server system messages (don't block — let chat store also see it)
   if (msg.type === 'system' && msg.from === '__server__') {
     try {
@@ -92,6 +94,9 @@ const unsubSignaling = connection.onMessage(async (msg) => {
   } else if (msg.type === 'ice-candidate') {
     const payload = msg.payload as { candidate: RTCIceCandidateInit };
     await addIceCandidate(msg.from, payload.candidate);
+  }
+  } catch (e) {
+    console.warn('[signaling] handler error:', e);
   }
 });
 
@@ -193,13 +198,18 @@ async function handleSendImage(file: File) {
     });
   } catch {
     // Fallback: upload original without compression
-    const res = await uploadMedia(file, file.type);
-    await chat.sendMessage('image', {
-      url: `${settings.restEndpoint}${res.url}`,
-      filename: file.name,
-      size: file.size,
-      mimeType: file.type,
-    });
+    try {
+      const res = await uploadMedia(file, file.type);
+      await chat.sendMessage('image', {
+        url: `${settings.restEndpoint}${res.url}`,
+        filename: file.name,
+        size: file.size,
+        mimeType: file.type,
+      });
+    } catch {
+      const { show: toast } = useToast();
+      toast('Failed to send image', 'error');
+    }
   }
 }
 
@@ -212,7 +222,11 @@ async function handleSendAudio(blob: Blob, duration: number) {
     },
     body: blob,
   });
-  if (!res.ok) return;
+  if (!res.ok) {
+    const { show: toast } = useToast();
+    toast('Failed to send audio', 'error');
+    return;
+  }
   const { url } = await res.json();
   await chat.sendMessage('audio', {
     url: `${settings.restEndpoint}${url}`,
@@ -230,6 +244,23 @@ function shareInviteLink() {
   linkCopied.value = true;
   setTimeout(() => (linkCopied.value = false), 2000);
 }
+
+onMounted(async () => {
+  // Handle page refresh: re-join if not connected to this room
+  if (chat.currentRoom?.id !== props.roomId) {
+    const room = await fetch(`${settings.restEndpoint}/api/rooms/${props.roomId}`)
+      .then(r => r.ok ? r.json() : null)
+      .catch(() => null);
+    if (room?.room) {
+      await chat.joinRoom(room.room);
+    } else {
+      router.replace({ name: 'lobby' });
+    }
+  } else if (chat.currentRoom?.mode === 'standard' && chat.messages.length === 0) {
+    // Already joined but no messages yet — fetch history
+    await chat.fetchHistory(props.roomId);
+  }
+});
 
 function handleLeave() {
   endCall();

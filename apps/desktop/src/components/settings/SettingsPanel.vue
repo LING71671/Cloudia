@@ -25,6 +25,46 @@ const themeOptions: { value: ThemeMode; label: string }[] = [
   { value: 'dark', label: 'Dark' },
   { value: 'system', label: 'System' },
 ];
+
+// Auto-update
+type UpdateStatus = 'idle' | 'checking' | 'available' | 'downloading' | 'up-to-date' | 'error';
+const updateStatus = ref<UpdateStatus>('idle');
+const updateVersion = ref('');
+const updateError = ref('');
+
+async function checkForUpdates() {
+  updateStatus.value = 'checking';
+  updateError.value = '';
+  try {
+    const { check } = await import('@tauri-apps/plugin-updater');
+    const update = await check();
+    if (update?.available) {
+      updateVersion.value = update.version;
+      updateStatus.value = 'available';
+    } else {
+      updateStatus.value = 'up-to-date';
+    }
+  } catch (e) {
+    updateStatus.value = 'error';
+    updateError.value = e instanceof Error ? e.message : 'Update check failed';
+  }
+}
+
+async function installUpdate() {
+  updateStatus.value = 'downloading';
+  try {
+    const { check } = await import('@tauri-apps/plugin-updater');
+    const { relaunch } = await import('@tauri-apps/plugin-process');
+    const update = await check();
+    if (update?.available) {
+      await update.downloadAndInstall();
+      await relaunch();
+    }
+  } catch (e) {
+    updateStatus.value = 'error';
+    updateError.value = e instanceof Error ? e.message : 'Update failed';
+  }
+}
 </script>
 
 <template>
@@ -87,9 +127,26 @@ const themeOptions: { value: ThemeMode; label: string }[] = [
 
     <div>
       <h3 class="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">About</h3>
-      <div class="text-xs text-gray-500 dark:text-gray-400 space-y-1">
+      <div class="text-xs text-gray-500 dark:text-gray-400 space-y-3">
         <p>Cloudia v0.0.1</p>
         <p>Decentralized end-to-end encrypted instant messaging</p>
+        <div class="flex items-center gap-2 pt-1">
+          <button
+            class="px-3 py-1.5 rounded-lg text-xs font-medium transition-colors"
+            :class="updateStatus === 'downloading'
+              ? 'bg-gray-100 text-gray-400 dark:bg-dark-muted dark:text-gray-500 cursor-not-allowed'
+              : 'bg-gray-100 text-gray-600 hover:bg-gray-200 dark:bg-dark-muted dark:text-gray-400 dark:hover:bg-dark-border'"
+            :disabled="updateStatus === 'checking' || updateStatus === 'downloading'"
+            @click="updateStatus === 'available' ? installUpdate() : checkForUpdates()"
+          >
+            <span v-if="updateStatus === 'checking'">Checking...</span>
+            <span v-else-if="updateStatus === 'downloading'">Installing...</span>
+            <span v-else-if="updateStatus === 'available'">Install v{{ updateVersion }}</span>
+            <span v-else-if="updateStatus === 'up-to-date'">Up to date</span>
+            <span v-else>Check for updates</span>
+          </button>
+          <span v-if="updateStatus === 'error'" class="text-xs text-red-500 dark:text-red-400">{{ updateError }}</span>
+        </div>
       </div>
     </div>
   </div>

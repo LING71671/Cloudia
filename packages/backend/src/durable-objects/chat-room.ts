@@ -430,8 +430,8 @@ export class ChatRoom extends DurableObject<{ DB: D1Database }> {
     return crypto.subtle.verify(
       { name: 'ECDSA', hash: 'SHA-384' },
       publicKey,
-      sigBytes.buffer as ArrayBuffer,
-      data.buffer as ArrayBuffer,
+      sigBytes,
+      data,
     );
   }
 }

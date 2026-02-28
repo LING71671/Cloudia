@@ -13,6 +13,8 @@ export const useChatStore = defineStore('chat', () => {
   const messages = ref<MessageEnvelope[]>([]);
   const currentRoom = ref<RoomInfo | null>(null);
   const loading = ref(false);
+  // clientId → displayName map, populated from join messages and member list
+  const memberNames = ref<Record<string, string>>({});
 
   const identity = useIdentityStore();
   const connection = useConnectionStore();
@@ -38,12 +40,37 @@ export const useChatStore = defineStore('chat', () => {
       return;
     }
 
+    // Skip text/media from self — already added optimistically in sendMessage
+    if (
+      (msg.type === 'text' || msg.type === 'ephemeral-text' || msg.type === 'image' || msg.type === 'audio') &&
+      msg.from === identity.clientId
+    ) {
+      return;
+    }
+
     // Skip internal server system messages (member lists, etc.)
     if (msg.type === 'system' && msg.from === '__server__') {
       try {
         const data = JSON.parse((msg.payload as { content: string }).content);
-        if (data.members || data.roomMode) return; // internal metadata, not user-facing
+        if (data.members) {
+          // Populate displayName map from member list
+          const updated = { ...memberNames.value };
+          for (const m of data.members as { clientId: string; displayName?: string }[]) {
+            if (m.displayName) updated[m.clientId] = m.displayName;
+          }
+          memberNames.value = updated;
+          return;
+        }
+        if (data.roomMode) return;
       } catch { /* plain text system message — show it */ }
+    }
+
+    // Track displayName from join messages
+    if (msg.type === 'join') {
+      const joinPayload = msg.payload as { displayName?: string };
+      if (joinPayload.displayName) {
+        memberNames.value = { ...memberNames.value, [msg.from]: joinPayload.displayName };
+      }
     }
 
     // Decrypt ephemeral messages from others
@@ -116,6 +143,7 @@ export const useChatStore = defineStore('chat', () => {
   async function joinRoom(room: RoomInfo, options?: { password?: string; accessToken?: string }) {
     currentRoom.value = room;
     messages.value = [];
+    memberNames.value = {};
 
     // Initialize E2EE for ephemeral rooms
     let ephemeralPubKey: JsonWebKey | null = null;
@@ -161,6 +189,7 @@ export const useChatStore = defineStore('chat', () => {
       connection.disconnect();
       currentRoom.value = null;
       messages.value = [];
+      memberNames.value = {};
     }
   }
 
@@ -223,8 +252,8 @@ export const useChatStore = defineStore('chat', () => {
       const existingIds = new Set(messages.value.map((m) => m.id));
       const uniqueHistory = history.filter((m) => !existingIds.has(m.id));
       messages.value = [...uniqueHistory, ...messages.value];
-    } catch {
-      // Non-critical
+    } catch (e) {
+      console.warn("[chat] fetchHistory failed:", e);
     }
   }
 
@@ -234,11 +263,11 @@ export const useChatStore = defineStore('chat', () => {
       const check = setInterval(() => {
         if (connection.isConnected) {
           clearInterval(check);
+          clearTimeout(timeout);
           resolve();
         }
       }, 50);
-      // Timeout after 5s
-      setTimeout(() => {
+      const timeout = setTimeout(() => {
         clearInterval(check);
         resolve();
       }, 5000);
@@ -279,6 +308,7 @@ export const useChatStore = defineStore('chat', () => {
     messages,
     currentRoom,
     loading,
+    memberNames,
     fetchRooms,
     createRoom,
     joinRoom,
