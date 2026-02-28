@@ -38,6 +38,14 @@ export const useChatStore = defineStore('chat', () => {
       return;
     }
 
+    // Skip internal server system messages (member lists, etc.)
+    if (msg.type === 'system' && msg.from === '__server__') {
+      try {
+        const data = JSON.parse((msg.payload as { content: string }).content);
+        if (data.members || data.roomMode) return; // internal metadata, not user-facing
+      } catch { /* plain text system message — show it */ }
+    }
+
     // Decrypt ephemeral messages from others
     if (msg.type === 'ephemeral-text' && msg.from !== identity.clientId) {
       const payload = msg.payload as { ciphertext: string; iv: string };
@@ -168,7 +176,7 @@ export const useChatStore = defineStore('chat', () => {
     }
   }
 
-  async function sendMessage(type: string, payload: unknown) {
+  async function sendMessage(type: string, payload: unknown, to?: string) {
     if (!identity.keyPair) return;
 
     const envelope: MessageEnvelope = {
@@ -180,6 +188,7 @@ export const useChatStore = defineStore('chat', () => {
       signature: '',
       payload: payload as never,
     };
+    if (to) envelope.to = to;
 
     // Sign the payload
     const data = canonicalize(envelope.payload);

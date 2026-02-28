@@ -142,8 +142,14 @@ export class ChatRoom extends DurableObject<{ DB: D1Database }> {
       case 'offer':
       case 'answer':
       case 'ice-candidate':
+        // Signaling must be targeted to a specific peer via msg.to
+        if (msg.to) {
+          this.relay(msg);
+        } else {
+          this.broadcast(msg, ws);
+        }
+        break;
       case 'key-exchange':
-        // Broadcast signaling to all peers (not relay) so multi-peer calls work
         this.broadcast(msg, ws);
         break;
       default:

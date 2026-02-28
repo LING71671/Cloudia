@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, onUnmounted, nextTick } from 'vue';
+import { ref, onUnmounted, nextTick } from 'vue';
 import { useRouter } from 'vue-router';
 import { useChatStore } from '@/stores/chat';
 import { useConnectionStore } from '@/stores/connection';
@@ -42,14 +42,6 @@ const callDuration = ref(0);
 const roomMembers = ref<string[]>([]);
 let callTimer: ReturnType<typeof setInterval> | null = null;
 
-// Grid columns based on participant count
-const gridClass = computed(() => {
-  const count = peerStreams.value.length;
-  if (count <= 1) return 'grid-cols-1';
-  if (count <= 2) return 'grid-cols-2';
-  return 'grid-cols-2';
-});
-
 // Handle WebRTC signaling messages and member tracking
 const unsubSignaling = connection.onMessage(async (msg) => {
   // Track room members from server system messages (don't block — let chat store also see it)
@@ -91,7 +83,8 @@ const unsubSignaling = connection.onMessage(async (msg) => {
     }
     const answer = await handleOffer(msg.from, payload.sdp);
     setupIceTrickle(msg.from);
-    await chat.sendMessage('answer', { sdp: answer.sdp });
+    // Send answer targeted to the offerer
+    await chat.sendMessage('answer', { sdp: answer.sdp }, msg.from);
     bindLocalVideo();
   } else if (msg.type === 'answer') {
     const payload = msg.payload as { sdp: string };
@@ -107,7 +100,8 @@ function setupIceTrickle(peerId: string) {
   if (!pc) return;
   pc.addEventListener('icecandidate', (event) => {
     if (event.candidate) {
-      chat.sendMessage('ice-candidate', { candidate: event.candidate.toJSON() });
+      // Send ICE candidate targeted to the specific peer
+      chat.sendMessage('ice-candidate', { candidate: event.candidate.toJSON() }, peerId);
     }
   });
 }
@@ -152,7 +146,8 @@ async function broadcastOffer() {
   for (const peerId of roomMembers.value) {
     const offer = await createOffer(peerId);
     setupIceTrickle(peerId);
-    await chat.sendMessage('offer', { sdp: offer.sdp, callMode: callMode.value });
+    // Send offer targeted to the specific peer
+    await chat.sendMessage('offer', { sdp: offer.sdp, callMode: callMode.value }, peerId);
   }
 }
 
@@ -253,7 +248,7 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <div class="flex flex-col h-full bg-white ghost:bg-ghost-bg dark:bg-dark-bg">
+  <div class="flex flex-col h-full bg-white ghost:bg-ghost-bg dark:bg-dark-bg relative">
     <!-- Header -->
     <div class="flex items-center gap-3 px-4 py-3 border-b border-gray-200 ghost:border-ghost-muted dark:border-dark-border">
       <button
@@ -321,50 +316,45 @@ onUnmounted(() => {
       </button>
     </div>
 
-    <!-- Video call area -->
-    <div v-if="callMode === 'video'" class="relative bg-black shrink-0 aspect-video max-h-[40vh] md:max-h-[60vh]">
-      <!-- Remote video grid -->
-      <div class="w-full h-full grid gap-1" :class="gridClass">
-        <div
-          v-for="[peerId, peer] in peerStreams"
-          :key="peerId"
-          class="relative bg-gray-900"
-        >
-          <video
-            autoplay
-            playsinline
-            class="w-full h-full object-contain"
-            :srcObject="peer.stream"
-          />
-          <span class="absolute bottom-1 left-2 text-xs text-white/70 bg-black/40 px-1.5 py-0.5 rounded">
-            {{ peerId.slice(0, 8) }}
-          </span>
-        </div>
-        <div v-if="peerStreams.length === 0" class="flex items-center justify-center text-white/40 text-sm">
-          Waiting for others to join...
-        </div>
+    <!-- Video call area — compact floating overlay -->
+    <div v-if="callMode === 'video'" class="absolute top-14 right-3 z-20 flex flex-col gap-1.5">
+      <!-- Remote videos -->
+      <div
+        v-for="[peerId, peer] in peerStreams"
+        :key="peerId"
+        class="relative w-36 h-28 md:w-44 md:h-32 rounded-lg overflow-hidden shadow-lg bg-gray-900 ring-1 ring-black/20"
+      >
+        <video
+          autoplay
+          playsinline
+          class="w-full h-full object-cover"
+          :srcObject="peer.stream"
+        />
+        <span class="absolute bottom-0.5 left-1 text-[10px] text-white/70 bg-black/50 px-1 rounded">
+          {{ peerId.slice(0, 6) }}
+        </span>
+      </div>
+      <div v-if="peerStreams.length === 0" class="w-36 h-28 md:w-44 md:h-32 rounded-lg bg-gray-900/80 flex items-center justify-center shadow-lg ring-1 ring-black/20">
+        <span class="text-[10px] text-white/50">Waiting...</span>
       </div>
       <!-- Local video PiP -->
-      <video
-        ref="localVideoRef"
-        autoplay
-        playsinline
-        muted
-        class="absolute bottom-2 right-2 w-28 h-20 md:w-48 md:h-36 rounded-lg object-cover border-2 border-white/30 shadow-lg"
-        :srcObject="localStream ?? undefined"
-      />
+      <div class="relative w-24 h-18 md:w-28 md:h-20 rounded-lg overflow-hidden shadow-md ring-1 ring-white/20 self-end">
+        <video
+          ref="localVideoRef"
+          autoplay
+          playsinline
+          muted
+          class="w-full h-full object-cover"
+          :srcObject="localStream ?? undefined"
+        />
+      </div>
     </div>
 
-    <!-- Voice call area -->
-    <div v-if="callMode === 'voice'" class="flex items-center justify-center gap-4 py-4 bg-gray-50 ghost:bg-ghost-muted dark:bg-dark-surface border-b border-gray-200 ghost:border-ghost-muted dark:border-dark-border shrink-0">
-      <div class="flex items-center gap-2">
-        <div class="w-3 h-3 bg-green-500 rounded-full animate-pulse" />
-        <span class="text-sm text-gray-600 ghost:text-ghost-text/60 dark:text-gray-400">Voice call</span>
-      </div>
-      <span class="text-sm font-mono text-gray-500">{{ formatDuration(callDuration) }}</span>
-      <span class="text-xs text-gray-400">
-        {{ peerStreams.length }} participant{{ peerStreams.length !== 1 ? 's' : '' }}
-      </span>
+    <!-- Voice call bar — compact -->
+    <div v-if="callMode === 'voice'" class="flex items-center justify-center gap-3 py-2 bg-gray-50 ghost:bg-ghost-muted dark:bg-dark-surface border-b border-gray-200 ghost:border-ghost-muted dark:border-dark-border shrink-0">
+      <div class="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
+      <span class="text-xs text-gray-600 ghost:text-ghost-text/60 dark:text-gray-400">Voice · {{ formatDuration(callDuration) }}</span>
+      <span class="text-xs text-gray-400">{{ peerStreams.length + 1 }} in call</span>
     </div>
 
     <!-- Ghost mode banner -->

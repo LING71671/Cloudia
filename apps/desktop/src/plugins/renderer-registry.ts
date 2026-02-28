@@ -5,12 +5,15 @@ import SystemMessage from '@/components/chat/renderers/SystemMessage.vue';
 import EncryptedMessage from '@/components/chat/renderers/EncryptedMessage.vue';
 import ImageMessage from '@/components/chat/renderers/ImageMessage.vue';
 import AudioMessage from '@/components/chat/renderers/AudioMessage.vue';
+import JoinLeaveMessage from '@/components/chat/renderers/JoinLeaveMessage.vue';
 
 const renderers: Partial<Record<MessageType, Component>> = {
   text: TextMessage,
   image: ImageMessage,
   audio: AudioMessage,
   system: SystemMessage,
+  join: JoinLeaveMessage,
+  leave: JoinLeaveMessage,
   'ephemeral-text': EncryptedMessage,
 };
 
