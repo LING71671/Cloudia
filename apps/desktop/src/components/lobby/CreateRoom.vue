@@ -2,6 +2,10 @@
 import { ref } from 'vue';
 import type { RoomMode, RoomAccessLevel } from '@cloudia/shared';
 
+defineProps<{
+  loading?: boolean;
+}>();
+
 const emit = defineEmits<{
   create: [name: string, mode: RoomMode, accessLevel: RoomAccessLevel, password?: string, dmTarget?: string];
 }>();
@@ -113,10 +117,10 @@ const accessLevels: { value: RoomAccessLevel; label: string }[] = [
       />
       <button
         type="submit"
-        :disabled="!name.trim() || (accessLevel === 'password' && !password) || (accessLevel === 'dm' && !dmTarget.trim())"
+        :disabled="loading || !name.trim() || (accessLevel === 'password' && !password) || (accessLevel === 'dm' && !dmTarget.trim())"
         class="w-full py-2.5 md:py-2 rounded-lg bg-primary text-white text-sm font-medium hover:bg-primary-hover disabled:opacity-40 transition-colors"
       >
-        Create Room
+        {{ loading ? 'Creating...' : 'Create Room' }}
       </button>
     </form>
   </div>

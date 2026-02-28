@@ -28,6 +28,16 @@ export const useChatStore = defineStore('chat', () => {
       return;
     }
 
+    // Skip WebRTC signaling messages — they're not chat messages
+    if (['offer', 'answer', 'ice-candidate', 'key-exchange'].includes(msg.type)) {
+      return;
+    }
+
+    // Skip join/leave from self (already handled optimistically)
+    if ((msg.type === 'join' || msg.type === 'leave') && msg.from === identity.clientId) {
+      return;
+    }
+
     // Decrypt ephemeral messages from others
     if (msg.type === 'ephemeral-text' && msg.from !== identity.clientId) {
       const payload = msg.payload as { ciphertext: string; iv: string };

@@ -3,6 +3,7 @@ import { useIdentityStore } from '@/stores/identity';
 import { useConnectionStore } from '@/stores/connection';
 import { useThemeStore } from '@/stores/theme';
 import ConnectionStatus from '@/components/common/ConnectionStatus.vue';
+import ToastContainer from '@/components/common/ToastContainer.vue';
 import { onMounted } from 'vue';
 
 const identity = useIdentityStore();
@@ -21,5 +22,6 @@ onMounted(async () => {
   >
     <ConnectionStatus v-if="connection.currentRoomId" />
     <router-view class="flex-1 overflow-hidden" />
+    <ToastContainer />
   </div>
 </template>

@@ -5,23 +5,26 @@ import type { Env } from '../db/queries';
 export const iceServersHandler = (c: Context<{ Bindings: Env }>) => {
   const response: IceServersResponse = {
     iceServers: [
-      { urls: 'stun:stun.l.google.com:19302' },
-      { urls: 'stun:stun1.l.google.com:19302' },
-      // Public free TURN servers (OpenRelay)
+      { urls: 'stun:stun.relay.metered.ca:80' },
       {
-        urls: 'turn:openrelay.metered.ca:80',
-        username: 'openrelayproject',
-        credential: 'openrelayproject',
+        urls: 'turn:global.relay.metered.ca:80',
+        username: 'b0f7eddf7a4b2ca489c9264f',
+        credential: 'NXSgirHqzgzQ0Eso',
       },
       {
-        urls: 'turn:openrelay.metered.ca:443',
-        username: 'openrelayproject',
-        credential: 'openrelayproject',
+        urls: 'turn:global.relay.metered.ca:80?transport=tcp',
+        username: 'b0f7eddf7a4b2ca489c9264f',
+        credential: 'NXSgirHqzgzQ0Eso',
       },
       {
-        urls: 'turn:openrelay.metered.ca:443?transport=tcp',
-        username: 'openrelayproject',
-        credential: 'openrelayproject',
+        urls: 'turn:global.relay.metered.ca:443',
+        username: 'b0f7eddf7a4b2ca489c9264f',
+        credential: 'NXSgirHqzgzQ0Eso',
+      },
+      {
+        urls: 'turns:global.relay.metered.ca:443?transport=tcp',
+        username: 'b0f7eddf7a4b2ca489c9264f',
+        credential: 'NXSgirHqzgzQ0Eso',
       },
     ],
   };

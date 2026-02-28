@@ -1,10 +1,14 @@
 <script setup lang="ts">
 import { ref } from 'vue';
 import type { MessageEnvelope } from '@cloudia/shared';
+import { useIdentityStore } from '@/stores/identity';
 
 const props = defineProps<{
   message: MessageEnvelope<'audio'>;
 }>();
+
+const identity = useIdentityStore();
+const isSelf = props.message.from === identity.clientId;
 
 const audioRef = ref<HTMLAudioElement | null>(null);
 const playing = ref(false);
@@ -50,11 +54,11 @@ const payload = props.message.payload as any;
 </script>
 
 <template>
-  <div class="flex flex-col gap-0.5">
-    <span class="text-xs text-gray-400 ghost:text-ghost-text/40 font-mono">
+  <div class="flex flex-col gap-0.5" :class="isSelf ? 'items-end' : 'items-start'">
+    <span v-if="!isSelf" class="text-xs text-gray-400 ghost:text-ghost-text/40 dark:text-gray-500 font-mono">
       {{ message.from.slice(0, 8) }}
     </span>
-    <div class="flex items-center gap-2 bg-gray-100 ghost:bg-ghost-muted rounded-lg px-3 py-2 max-w-[240px]">
+    <div class="flex items-center gap-2 bg-gray-100 ghost:bg-ghost-muted dark:bg-dark-muted rounded-lg px-3 py-2 max-w-[240px]">
       <button
         class="w-8 h-8 flex items-center justify-center rounded-full bg-primary text-white shrink-0"
         @click="togglePlay"
@@ -67,10 +71,10 @@ const payload = props.message.payload as any;
         </svg>
       </button>
       <div class="flex-1 min-w-0">
-        <div class="h-1 bg-gray-300 ghost:bg-ghost-text/20 rounded-full overflow-hidden">
+        <div class="h-1 bg-gray-300 ghost:bg-ghost-text/20 dark:bg-dark-border rounded-full overflow-hidden">
           <div class="h-full bg-primary rounded-full transition-all" :style="{ width: progress + '%' }" />
         </div>
-        <span class="text-xs text-gray-500 mt-0.5 block">
+        <span class="text-xs text-gray-500 dark:text-gray-400 mt-0.5 block">
           {{ formatDuration(payload.duration) }}
         </span>
       </div>

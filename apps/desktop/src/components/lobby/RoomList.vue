@@ -15,6 +15,7 @@ const emit = defineEmits<{
 
 const promptRoom = ref<RoomInfo | null>(null);
 const passwordInput = ref('');
+const confirmDeleteId = ref<string | null>(null);
 
 function handleClick(room: RoomInfo) {
   if (room.accessLevel === 'password') {
@@ -30,6 +31,19 @@ function submitPassword() {
     emit('join', promptRoom.value, passwordInput.value);
     promptRoom.value = null;
     passwordInput.value = '';
+  }
+}
+
+function handleDelete(roomId: string) {
+  if (confirmDeleteId.value === roomId) {
+    emit('delete', roomId);
+    confirmDeleteId.value = null;
+  } else {
+    confirmDeleteId.value = roomId;
+    // Auto-reset after 3 seconds
+    setTimeout(() => {
+      if (confirmDeleteId.value === roomId) confirmDeleteId.value = null;
+    }, 3000);
   }
 }
 </script>
@@ -67,16 +81,20 @@ function submitPassword() {
           <span v-if="room.shortCode" class="font-mono text-gray-300 dark:text-gray-600 ml-1">{{ room.shortCode }}</span>
         </div>
       </div>
-      <!-- Delete button (owner only) -->
+      <!-- Delete button (owner only) — tap once to confirm, tap again to delete -->
       <button
         v-if="room.ownerClientId === currentClientId"
-        class="p-1.5 rounded text-gray-300 hover:text-red-500 hover:bg-red-50 dark:text-gray-600 dark:hover:bg-red-900/20 transition-colors shrink-0"
-        title="Delete room"
-        @click.stop="emit('delete', room.id)"
+        class="p-1.5 rounded transition-colors shrink-0"
+        :class="confirmDeleteId === room.id
+          ? 'text-red-500 bg-red-50 dark:bg-red-900/20'
+          : 'text-gray-300 hover:text-red-500 hover:bg-red-50 dark:text-gray-600 dark:hover:bg-red-900/20'"
+        :title="confirmDeleteId === room.id ? 'Tap again to confirm' : 'Delete room'"
+        @click.stop="handleDelete(room.id)"
       >
-        <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+        <svg v-if="confirmDeleteId !== room.id" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
           <path stroke-linecap="round" stroke-linejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
         </svg>
+        <span v-else class="text-xs font-medium px-1">Delete?</span>
       </button>
     </button>
 

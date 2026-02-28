@@ -10,9 +10,9 @@ function copyId() {
 
 <template>
   <div class="flex items-center gap-2 text-xs">
-    <span class="font-mono text-gray-500 ghost:text-ghost-text/60">{{ identity.shortId }}</span>
+    <span class="font-mono text-gray-500 ghost:text-ghost-text/60 dark:text-gray-400">{{ identity.shortId }}</span>
     <button
-      class="text-gray-400 hover:text-gray-600 ghost:hover:text-ghost-text"
+      class="text-gray-400 hover:text-gray-600 ghost:hover:text-ghost-text dark:text-gray-500 dark:hover:text-dark-text"
       title="Copy full ID"
       @click="copyId"
     >

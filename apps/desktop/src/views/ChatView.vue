@@ -52,7 +52,7 @@ const gridClass = computed(() => {
 
 // Handle WebRTC signaling messages and member tracking
 const unsubSignaling = connection.onMessage(async (msg) => {
-  // Track room members from server system messages
+  // Track room members from server system messages (don't block — let chat store also see it)
   if (msg.type === 'system' && msg.from === '__server__') {
     try {
       const data = JSON.parse((msg.payload as { content: string }).content);
@@ -62,22 +62,21 @@ const unsubSignaling = connection.onMessage(async (msg) => {
           .filter((id: string) => id !== identity.clientId);
       }
     } catch { /* not a member list message */ }
-    return;
+    // Don't return — let chat store handler also process system messages
   }
 
-  // Track join/leave for member list
+  // Track join/leave for member list (don't block other handlers)
   if (msg.type === 'join' && msg.from !== identity.clientId) {
     if (!roomMembers.value.includes(msg.from)) {
       roomMembers.value = [...roomMembers.value, msg.from];
     }
-    return;
   }
   if (msg.type === 'leave' && msg.from !== identity.clientId) {
     roomMembers.value = roomMembers.value.filter(id => id !== msg.from);
     removePeer(msg.from);
-    return;
   }
 
+  // Only handle WebRTC signaling below
   if (msg.from === identity.clientId) return;
 
   if (msg.type === 'offer') {
@@ -271,6 +270,7 @@ onUnmounted(() => {
         </h2>
         <span class="text-xs text-gray-400 ghost:text-ghost-text/40 dark:text-gray-500">
           {{ chat.currentRoom?.mode === 'ephemeral' ? 'Ghost Mode · E2EE' : 'Standard' }}
+          · {{ roomMembers.length + 1 }} online
         </span>
       </div>
       <!-- Share invite link -->
