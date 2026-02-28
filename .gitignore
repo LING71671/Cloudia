@@ -32,3 +32,6 @@ Thumbs.db
 *.log
 npm-debug.log*
 pnpm-debug.log*
+
+# Tauri signing keys (private key must never be committed)
+*.key

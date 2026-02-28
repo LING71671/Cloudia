@@ -37,7 +37,7 @@
   },
   "plugins": {
     "updater": {
-      "pubkey": "",
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDRGQTM1NjJGQkQ5MjdENEEKUldSS2ZaSzlMMWFqVHpEejhWNjJHNEJGMWdDR2V0dEl3WWNicHR1d1YyZXlIOXFLVUtuYWF3L1UK",
       "endpoints": [
         "https://github.com/LING71671/cloudia/releases/latest/download/latest.json"
       ]
