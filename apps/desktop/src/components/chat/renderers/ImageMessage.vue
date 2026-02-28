@@ -16,17 +16,20 @@ function openImage() {
 </script>
 
 <template>
-  <div class="flex flex-col gap-0.5" :class="isSelf ? 'items-end' : 'items-start'">
-    <span v-if="!isSelf" class="text-xs text-gray-400 ghost:text-ghost-text/40 dark:text-gray-500 font-mono">
+  <div class="flex flex-col gap-1 w-full" :class="isSelf ? 'items-end' : 'items-start'">
+    <span v-if="!isSelf" class="text-[11px] text-gray-400/80 ghost:text-ghost-text/40 dark:text-gray-500 font-medium tracking-wide">
       {{ message.from.slice(0, 8) }}
     </span>
-    <img
-      :src="payload.thumbnailUrl ?? payload.url"
-      :alt="payload.filename"
-      class="max-w-xs rounded-lg cursor-pointer hover:opacity-90 transition-opacity"
-      loading="lazy"
-      @click="openImage"
-    />
-    <span class="text-xs text-gray-400 ghost:text-ghost-text/40 dark:text-gray-500">{{ payload.filename }}</span>
+    <div class="relative group mt-0.5">
+       <img
+        :src="payload.thumbnailUrl ?? payload.url"
+        :alt="payload.filename"
+        class="max-w-[280px] md:max-w-sm rounded-[14px] cursor-pointer hover:opacity-95 transition-all shadow-sm ring-1 ring-gray-200/50 dark:ring-white/10"
+        :class="isSelf ? 'rounded-br-[4px]' : 'rounded-bl-[4px]'"
+        loading="lazy"
+        @click="openImage"
+      />
+      <div class="absolute inset-0 ring-1 ring-inset ring-black/5 rounded-[14px] pointer-events-none" :class="isSelf ? 'rounded-br-[4px]' : 'rounded-bl-[4px]'"></div>
+    </div>
   </div>
 </template>

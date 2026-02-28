@@ -11,7 +11,9 @@ const label = props.message.type === 'join'
 </script>
 
 <template>
-  <div class="text-xs text-center py-0.5 px-2 text-gray-400 ghost:text-ghost-text/40 dark:text-gray-500">
-    {{ label }}
+  <div class="flex items-center justify-center my-2">
+    <div class="text-[11px] font-medium tracking-wide text-gray-400 ghost:text-ghost-text/40 dark:text-gray-500 uppercase">
+      {{ label }}
+    </div>
   </div>
 </template>

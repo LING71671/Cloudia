@@ -1,18 +1,53 @@
 @import "tailwindcss";
 
-@custom-variant ghost (.ghost-mode &);
-@custom-variant dark (.dark &);
-
 @theme {
-  --color-ghost-bg: #0a0a0a;
-  --color-ghost-text: #39ff14;
-  --color-ghost-accent: #ff3131;
-  --color-ghost-muted: #1a1a2e;
-  --color-primary: #6366f1;
-  --color-primary-hover: #4f46e5;
-  --color-dark-bg: #111827;
-  --color-dark-surface: #1f2937;
-  --color-dark-text: #e5e7eb;
-  --color-dark-muted: #374151;
-  --color-dark-border: #4b5563;
+  --color-primary: #4F46E5;
+  --color-primary-hover: #4338CA;
+  --color-primary-soft: #EEF2FF;
+  --color-primary-soft-dark: #312E81;
+  --color-ghost-bg: #050505;
+  --color-ghost-text: #4ade80;
+  --color-ghost-accent: #22c55e;
+  --color-ghost-muted: #111111;
+  --color-ghost-border: #1a1a1a;
+  --color-dark-bg: #09090b;
+  --color-dark-surface: #18181b;
+  --color-dark-surface-elevated: #27272a;
+  --color-dark-text: #fafafa;
+  --color-dark-text-secondary: #a1a1aa;
+  --color-dark-muted: #27272a;
+  --color-dark-border: #27272a;
+  --color-dark-border-hover: #3f3f46;
+}
+
+@layer base {
+  body {
+    transition-property: color, background-color, border-color, text-decoration-color, fill, stroke;
+    transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+    transition-duration: 300ms;
+  }
+
+  .glass {
+    background-color: rgb(255 255 255 / 0.7);
+    backdrop-filter: blur(24px);
+    border-width: 1px;
+    border-color: rgb(255 255 255 / 0.2);
+  }
+
+  .dark .glass {
+    background-color: rgb(24 24 27 / 0.7);
+    border-color: rgb(255 255 255 / 0.05);
+  }
+
+  .glass-card {
+    background-color: rgb(255 255 255 / 0.8);
+    backdrop-filter: blur(40px);
+    border-width: 1px;
+    border-color: #f3f4f6;
+  }
+
+  .dark .glass-card {
+    background-color: rgb(39 39 42 / 0.8);
+    border-color: rgb(255 255 255 / 0.05);
+  }
 }
