@@ -30,7 +30,7 @@ watch(
     >
       <component :is="getRenderer(msg.type)" :message="msg" />
     </div>
-    <div v-if="messages.length === 0" class="text-center text-gray-400 text-sm mt-8">
+    <div v-if="messages.length === 0" class="text-center text-gray-400 ghost:text-ghost-text/40 text-sm mt-8">
       No messages yet. Say something!
     </div>
   </div>

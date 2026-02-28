@@ -1,6 +1,7 @@
 @import "tailwindcss";
 
 @custom-variant ghost (.ghost-mode &);
+@custom-variant dark (.dark &);
 
 @theme {
   --color-ghost-bg: #0a0a0a;
@@ -9,4 +10,9 @@
   --color-ghost-muted: #1a1a2e;
   --color-primary: #6366f1;
   --color-primary-hover: #4f46e5;
+  --color-dark-bg: #111827;
+  --color-dark-surface: #1f2937;
+  --color-dark-text: #e5e7eb;
+  --color-dark-muted: #374151;
+  --color-dark-border: #4b5563;
 }

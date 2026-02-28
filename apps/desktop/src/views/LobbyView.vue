@@ -46,21 +46,29 @@ async function handleJoinByCode(code: string) {
     console.error('Failed to join by code:', e);
   }
 }
+
+async function handleDelete(roomId: string) {
+  try {
+    await chat.removeRoom(roomId);
+  } catch (e) {
+    console.error('Failed to delete room:', e);
+  }
+}
 </script>
 
 <template>
   <div class="flex h-full">
-    <aside class="w-72 border-r border-gray-200 flex flex-col bg-white">
-      <div class="p-4 border-b border-gray-100 flex items-center justify-between">
-        <h1 class="text-lg font-semibold text-gray-800">Cloudia</h1>
+    <aside class="w-full md:w-72 md:border-r border-gray-200 dark:border-dark-border flex flex-col bg-white dark:bg-dark-surface">
+      <div class="p-4 border-b border-gray-100 dark:border-dark-border flex items-center justify-between">
+        <h1 class="text-lg font-semibold text-gray-800 dark:text-dark-text">Cloudia</h1>
         <div class="flex items-center gap-2">
           <IdentityBadge />
           <button
-            class="text-gray-400 hover:text-gray-600"
+            class="p-2 -mr-2 text-gray-400 hover:text-gray-600 dark:text-gray-500 dark:hover:text-dark-text"
             title="Settings"
             @click="router.push({ name: 'settings' })"
           >
-            <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+            <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
               <path stroke-linecap="round" stroke-linejoin="round" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.066 2.573c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.573 1.066c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.066-2.573c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
               <path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
             </svg>
@@ -71,11 +79,11 @@ async function handleJoinByCode(code: string) {
         <CreateRoom @create="handleCreate" />
         <JoinByCode @join-by-code="handleJoinByCode" />
       </div>
-      <div class="flex-1 overflow-y-auto px-2">
-        <RoomList :rooms="chat.rooms" :loading="chat.loading" @join="handleJoin" />
+      <div class="flex-1 overflow-y-auto px-2 pb-4">
+        <RoomList :rooms="chat.rooms" :loading="chat.loading" :current-client-id="identity.clientId" @join="handleJoin" @delete="handleDelete" />
       </div>
     </aside>
-    <main class="flex-1 flex items-center justify-center text-gray-400 text-sm">
+    <main class="hidden md:flex flex-1 items-center justify-center text-gray-400 dark:text-gray-600 text-sm">
       Select a room to start chatting
     </main>
   </div>

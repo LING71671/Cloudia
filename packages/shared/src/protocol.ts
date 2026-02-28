@@ -42,7 +42,7 @@ export type MessageType =
 
 export interface PayloadMap {
   'text': { content: string };
-  'image': { url: string; filename: string; size: number; mimeType: string };
+  'image': { url: string; thumbnailUrl?: string; filename: string; size: number; mimeType: string };
   'audio': { url: string; duration: number; size: number; mimeType: string };
   'system': { content: string; level: 'info' | 'warn' | 'error' };
   'join': {

@@ -7,11 +7,12 @@ import { useSettingsStore } from '@/stores/settings';
 import { useIdentityStore } from '@/stores/identity';
 import { useWebRTC } from '@/composables/useWebRTC';
 import { generateInviteLink } from '@/utils/invite';
+import { compressImage } from '@/utils/image-compress';
 import MessageList from '@/components/chat/MessageList.vue';
 import MessageInput from '@/components/chat/MessageInput.vue';
 import GhostModeBanner from '@/components/chat/GhostModeBanner.vue';
 
-defineProps<{
+const props = defineProps<{
   roomId: string;
 }>();
 
@@ -38,6 +39,7 @@ const {
 
 const localVideoRef = ref<HTMLVideoElement | null>(null);
 const callDuration = ref(0);
+const roomMembers = ref<string[]>([]);
 let callTimer: ReturnType<typeof setInterval> | null = null;
 
 // Grid columns based on participant count
@@ -48,8 +50,34 @@ const gridClass = computed(() => {
   return 'grid-cols-2';
 });
 
-// Handle WebRTC signaling messages
+// Handle WebRTC signaling messages and member tracking
 const unsubSignaling = connection.onMessage(async (msg) => {
+  // Track room members from server system messages
+  if (msg.type === 'system' && msg.from === '__server__') {
+    try {
+      const data = JSON.parse((msg.payload as { content: string }).content);
+      if (data.members) {
+        roomMembers.value = data.members
+          .map((m: { clientId: string }) => m.clientId)
+          .filter((id: string) => id !== identity.clientId);
+      }
+    } catch { /* not a member list message */ }
+    return;
+  }
+
+  // Track join/leave for member list
+  if (msg.type === 'join' && msg.from !== identity.clientId) {
+    if (!roomMembers.value.includes(msg.from)) {
+      roomMembers.value = [...roomMembers.value, msg.from];
+    }
+    return;
+  }
+  if (msg.type === 'leave' && msg.from !== identity.clientId) {
+    roomMembers.value = roomMembers.value.filter(id => id !== msg.from);
+    removePeer(msg.from);
+    return;
+  }
+
   if (msg.from === identity.clientId) return;
 
   if (msg.type === 'offer') {
@@ -63,8 +91,8 @@ const unsubSignaling = connection.onMessage(async (msg) => {
       startCallTimer();
     }
     const answer = await handleOffer(msg.from, payload.sdp);
-    await chat.sendMessage('answer', { sdp: answer.sdp });
     setupIceTrickle(msg.from);
+    await chat.sendMessage('answer', { sdp: answer.sdp });
     bindLocalVideo();
   } else if (msg.type === 'answer') {
     const payload = msg.payload as { sdp: string };
@@ -72,8 +100,6 @@ const unsubSignaling = connection.onMessage(async (msg) => {
   } else if (msg.type === 'ice-candidate') {
     const payload = msg.payload as { candidate: RTCIceCandidateInit };
     await addIceCandidate(msg.from, payload.candidate);
-  } else if (msg.type === 'leave') {
-    removePeer(msg.from);
   }
 });
 
@@ -123,11 +149,12 @@ async function startVoiceCall() {
 }
 
 async function broadcastOffer() {
-  // Create a peer connection and send offer (peers will respond)
-  // For mesh: each new joiner sends offer to all existing participants
-  // The server's member list system message tells us who's in the room
-  const offer = await createOffer('__broadcast__');
-  await chat.sendMessage('offer', { sdp: offer.sdp, callMode: callMode.value });
+  // Create individual peer connections for each known room member
+  for (const peerId of roomMembers.value) {
+    const offer = await createOffer(peerId);
+    setupIceTrickle(peerId);
+    await chat.sendMessage('offer', { sdp: offer.sdp, callMode: callMode.value });
+  }
 }
 
 function endCall() {
@@ -142,23 +169,44 @@ function handleSend(content: string) {
   chat.sendText(content);
 }
 
-async function handleSendImage(file: File) {
+async function uploadMedia(blob: Blob, contentType: string): Promise<{ url: string }> {
   const res = await fetch(`${settings.restEndpoint}/api/media/upload`, {
     method: 'POST',
-    headers: {
-      'Content-Type': file.type,
-      'X-Client-ID': identity.clientId,
-    },
-    body: file,
+    headers: { 'Content-Type': contentType, 'X-Client-ID': identity.clientId },
+    body: blob,
   });
-  if (!res.ok) return;
-  const { url } = await res.json();
-  await chat.sendMessage('image', {
-    url: `${settings.restEndpoint}${url}`,
-    filename: file.name,
-    size: file.size,
-    mimeType: file.type,
-  });
+  if (!res.ok) throw new Error('Upload failed');
+  return res.json();
+}
+
+async function handleSendImage(file: File) {
+  try {
+    // Compress main image and generate thumbnail in parallel
+    const [mainBlob, thumbBlob] = await Promise.all([
+      compressImage(file, { maxWidth: 1920, maxHeight: 1920, quality: 0.8 }),
+      compressImage(file, { maxWidth: 300, maxHeight: 300, quality: 0.6 }),
+    ]);
+    const [mainRes, thumbRes] = await Promise.all([
+      uploadMedia(mainBlob, 'image/jpeg'),
+      uploadMedia(thumbBlob, 'image/jpeg'),
+    ]);
+    await chat.sendMessage('image', {
+      url: `${settings.restEndpoint}${mainRes.url}`,
+      thumbnailUrl: `${settings.restEndpoint}${thumbRes.url}`,
+      filename: file.name,
+      size: mainBlob.size,
+      mimeType: 'image/jpeg',
+    });
+  } catch {
+    // Fallback: upload original without compression
+    const res = await uploadMedia(file, file.type);
+    await chat.sendMessage('image', {
+      url: `${settings.restEndpoint}${res.url}`,
+      filename: file.name,
+      size: file.size,
+      mimeType: file.type,
+    });
+  }
 }
 
 async function handleSendAudio(blob: Blob, duration: number) {
@@ -198,16 +246,19 @@ function handleLeave() {
 onUnmounted(() => {
   unsubSignaling();
   endCall();
-  chat.leaveRoom();
+  // Only leave if we're still in the room this component was managing
+  if (chat.currentRoom?.id === props.roomId) {
+    chat.leaveRoom();
+  }
 });
 </script>
 
 <template>
-  <div class="flex flex-col h-full bg-white ghost:bg-ghost-bg">
+  <div class="flex flex-col h-full bg-white ghost:bg-ghost-bg dark:bg-dark-bg">
     <!-- Header -->
-    <div class="flex items-center gap-3 px-4 py-3 border-b border-gray-200 ghost:border-ghost-muted">
+    <div class="flex items-center gap-3 px-4 py-3 border-b border-gray-200 ghost:border-ghost-muted dark:border-dark-border">
       <button
-        class="text-gray-500 hover:text-gray-700 ghost:text-ghost-text/60 ghost:hover:text-ghost-text"
+        class="text-gray-500 hover:text-gray-700 ghost:text-ghost-text/60 ghost:hover:text-ghost-text dark:text-gray-400 dark:hover:text-dark-text"
         @click="handleLeave"
       >
         <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
@@ -215,16 +266,16 @@ onUnmounted(() => {
         </svg>
       </button>
       <div class="flex-1 min-w-0">
-        <h2 class="text-sm font-semibold text-gray-800 ghost:text-ghost-text truncate">
+        <h2 class="text-sm font-semibold text-gray-800 ghost:text-ghost-text dark:text-dark-text truncate">
           {{ chat.currentRoom?.name ?? 'Chat' }}
         </h2>
-        <span class="text-xs text-gray-400 ghost:text-ghost-text/40">
+        <span class="text-xs text-gray-400 ghost:text-ghost-text/40 dark:text-gray-500">
           {{ chat.currentRoom?.mode === 'ephemeral' ? 'Ghost Mode · E2EE' : 'Standard' }}
         </span>
       </div>
       <!-- Share invite link -->
       <button
-        class="p-2 rounded-lg text-gray-500 hover:bg-gray-100 ghost:text-ghost-text/60 ghost:hover:bg-ghost-muted"
+        class="p-2 rounded-lg text-gray-500 hover:bg-gray-100 ghost:text-ghost-text/60 ghost:hover:bg-ghost-muted dark:text-gray-400 dark:hover:bg-dark-muted"
         :title="linkCopied ? 'Copied!' : 'Copy invite link'"
         @click="shareInviteLink"
       >
@@ -238,7 +289,7 @@ onUnmounted(() => {
       <!-- Voice call button -->
       <button
         v-if="callMode === 'none'"
-        class="p-2 rounded-lg text-gray-500 hover:bg-gray-100 ghost:text-ghost-text/60 ghost:hover:bg-ghost-muted"
+        class="p-2 rounded-lg text-gray-500 hover:bg-gray-100 ghost:text-ghost-text/60 ghost:hover:bg-ghost-muted dark:text-gray-400 dark:hover:bg-dark-muted"
         title="Voice call"
         @click="startVoiceCall"
       >
@@ -249,7 +300,7 @@ onUnmounted(() => {
       <!-- Video call button -->
       <button
         v-if="callMode === 'none'"
-        class="p-2 rounded-lg text-gray-500 hover:bg-gray-100 ghost:text-ghost-text/60 ghost:hover:bg-ghost-muted"
+        class="p-2 rounded-lg text-gray-500 hover:bg-gray-100 ghost:text-ghost-text/60 ghost:hover:bg-ghost-muted dark:text-gray-400 dark:hover:bg-dark-muted"
         title="Video call"
         @click="startVideoCall"
       >
@@ -271,7 +322,7 @@ onUnmounted(() => {
     </div>
 
     <!-- Video call area -->
-    <div v-if="callMode === 'video'" class="relative bg-black shrink-0 aspect-video max-h-[60vh]">
+    <div v-if="callMode === 'video'" class="relative bg-black shrink-0 aspect-video max-h-[40vh] md:max-h-[60vh]">
       <!-- Remote video grid -->
       <div class="w-full h-full grid gap-1" :class="gridClass">
         <div
@@ -299,16 +350,16 @@ onUnmounted(() => {
         autoplay
         playsinline
         muted
-        class="absolute bottom-3 right-3 w-32 h-24 rounded-lg object-cover border-2 border-white/30 shadow-lg"
+        class="absolute bottom-2 right-2 w-28 h-20 md:w-48 md:h-36 rounded-lg object-cover border-2 border-white/30 shadow-lg"
         :srcObject="localStream ?? undefined"
       />
     </div>
 
     <!-- Voice call area -->
-    <div v-if="callMode === 'voice'" class="flex items-center justify-center gap-4 py-4 bg-gray-50 ghost:bg-ghost-muted border-b border-gray-200 ghost:border-ghost-muted shrink-0">
+    <div v-if="callMode === 'voice'" class="flex items-center justify-center gap-4 py-4 bg-gray-50 ghost:bg-ghost-muted dark:bg-dark-surface border-b border-gray-200 ghost:border-ghost-muted dark:border-dark-border shrink-0">
       <div class="flex items-center gap-2">
         <div class="w-3 h-3 bg-green-500 rounded-full animate-pulse" />
-        <span class="text-sm text-gray-600 ghost:text-ghost-text/60">Voice call</span>
+        <span class="text-sm text-gray-600 ghost:text-ghost-text/60 dark:text-gray-400">Voice call</span>
       </div>
       <span class="text-sm font-mono text-gray-500">{{ formatDuration(callDuration) }}</span>
       <span class="text-xs text-gray-400">

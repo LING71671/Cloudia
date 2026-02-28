@@ -10,14 +10,14 @@ const router = useRouter();
   <div class="max-w-lg mx-auto p-6">
     <div class="flex items-center gap-3 mb-6">
       <button
-        class="text-gray-500 hover:text-gray-700"
+        class="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-dark-text"
         @click="router.push({ name: 'lobby' })"
       >
         <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
           <path stroke-linecap="round" stroke-linejoin="round" d="M15 19l-7-7 7-7" />
         </svg>
       </button>
-      <h2 class="text-lg font-semibold text-gray-800">Settings</h2>
+      <h2 class="text-lg font-semibold text-gray-800 dark:text-dark-text">Settings</h2>
     </div>
 
     <SettingsPanel />

@@ -21,27 +21,27 @@ function reset() {
 </script>
 
 <template>
-  <details class="mt-6 border border-gray-200 rounded-lg">
-    <summary class="px-4 py-3 text-sm font-medium text-gray-600 cursor-pointer hover:text-gray-800">
+  <details class="mt-6 border border-gray-200 dark:border-dark-border rounded-lg">
+    <summary class="px-4 py-3 text-sm font-medium text-gray-600 dark:text-gray-400 cursor-pointer hover:text-gray-800 dark:hover:text-dark-text">
       Advanced — Custom Server Endpoint
     </summary>
     <div class="px-4 pb-4 space-y-3">
       <div>
-        <label class="block text-xs text-gray-500 mb-1">WebSocket Endpoint</label>
+        <label class="block text-xs text-gray-500 dark:text-gray-400 mb-1">WebSocket Endpoint</label>
         <input
           v-model="wsInput"
           type="text"
           placeholder="wss://your-server.example.com"
-          class="w-full px-3 py-2 rounded-lg border border-gray-300 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-primary/50"
+          class="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-dark-border dark:bg-dark-muted dark:text-dark-text text-sm font-mono focus:outline-none focus:ring-2 focus:ring-primary/50"
         />
       </div>
       <div>
-        <label class="block text-xs text-gray-500 mb-1">REST Endpoint</label>
+        <label class="block text-xs text-gray-500 dark:text-gray-400 mb-1">REST Endpoint</label>
         <input
           v-model="restInput"
           type="text"
           placeholder="https://your-server.example.com"
-          class="w-full px-3 py-2 rounded-lg border border-gray-300 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-primary/50"
+          class="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-dark-border dark:bg-dark-muted dark:text-dark-text text-sm font-mono focus:outline-none focus:ring-2 focus:ring-primary/50"
         />
       </div>
       <div class="flex gap-2">
@@ -52,7 +52,7 @@ function reset() {
           {{ saved ? 'Saved!' : 'Save' }}
         </button>
         <button
-          class="px-4 py-1.5 rounded-lg border border-gray-300 text-sm text-gray-600 hover:bg-gray-50 transition-colors"
+          class="px-4 py-1.5 rounded-lg border border-gray-300 dark:border-dark-border text-sm text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-dark-muted transition-colors"
           @click="reset"
         >
           Reset to Default

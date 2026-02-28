@@ -1,11 +1,9 @@
 import type { RoomInfo, InvitationPayload, InvitationToken } from '@cloudia/shared';
 import { canonicalize, signPayload } from '@cloudia/crypto';
 
-const BASE_URL = 'https://cloudia.071.cc.cd';
-
 /** Generate a shareable invite link for a room */
 export function generateInviteLink(room: RoomInfo, wsEndpoint?: string, accessToken?: string): string {
-  const url = new URL(`/join`, BASE_URL);
+  const url = new URL(`/join`, window.location.origin);
   url.searchParams.set('room', room.id);
   url.searchParams.set('name', room.name);
   url.searchParams.set('mode', room.mode);

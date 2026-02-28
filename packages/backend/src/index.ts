@@ -9,6 +9,7 @@ import {
   getRoomHandler,
   getMessagesHandler,
   lookupByShortCodeHandler,
+  deleteRoomHandler,
 } from './api/rooms';
 import { getRoomWithAuth, getDmParticipants } from './db/queries';
 
@@ -26,6 +27,7 @@ app.post('/api/rooms', createRoomHandler);
 app.get('/api/rooms/code/:shortCode', lookupByShortCodeHandler);
 app.get('/api/rooms/:roomId', getRoomHandler);
 app.get('/api/rooms/:roomId/messages', getMessagesHandler);
+app.delete('/api/rooms/:roomId', deleteRoomHandler);
 
 // Media upload/download (R2)
 app.post('/api/media/upload', uploadHandler);
@@ -46,6 +48,7 @@ app.get('/api/ws/:roomId', async (c) => {
   const url = new URL(c.req.url);
   url.searchParams.set('mode', room.mode);
   url.searchParams.set('name', room.name);
+  url.searchParams.set('roomId', roomId);
   url.searchParams.set('accessLevel', room.accessLevel);
   if (room.passwordHash) url.searchParams.set('passwordHash', room.passwordHash);
   if (room.ownerPublicKey) url.searchParams.set('ownerPublicKey', room.ownerPublicKey);

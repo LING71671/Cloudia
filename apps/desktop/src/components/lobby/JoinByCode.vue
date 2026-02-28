@@ -18,11 +18,11 @@ function handleInput(e: Event) {
       type="text"
       maxlength="6"
       placeholder="ABC123"
-      class="flex-1 px-3 py-2 rounded-lg border border-gray-300 text-sm font-mono tracking-widest uppercase text-center focus:outline-none focus:ring-2 focus:ring-primary/50"
+      class="flex-1 px-3 py-2 rounded-lg border border-gray-300 dark:border-dark-border dark:bg-dark-muted dark:text-dark-text text-sm font-mono tracking-widest uppercase text-center focus:outline-none focus:ring-2 focus:ring-primary/50"
     />
     <button
       :disabled="code.length !== 6"
-      class="px-4 py-2 rounded-lg bg-primary text-white text-sm font-medium hover:bg-primary-hover disabled:opacity-40 transition-colors"
+      class="px-4 py-2.5 md:py-2 rounded-lg bg-primary text-white text-sm font-medium hover:bg-primary-hover disabled:opacity-40 transition-colors"
       @click="emit('join-by-code', code)"
     >
       Join

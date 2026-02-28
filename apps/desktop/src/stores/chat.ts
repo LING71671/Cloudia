@@ -245,6 +245,16 @@ export const useChatStore = defineStore('chat', () => {
     return room;
   }
 
+  async function removeRoom(roomId: string) {
+    const settings = useSettingsStore();
+    const res = await fetch(`${settings.restEndpoint}/api/rooms/${roomId}`, {
+      method: 'DELETE',
+      headers: { 'X-Client-ID': identity.clientId },
+    });
+    if (!res.ok) throw new Error('Failed to delete room');
+    rooms.value = rooms.value.filter(r => r.id !== roomId);
+  }
+
   return {
     rooms,
     messages,
@@ -259,5 +269,6 @@ export const useChatStore = defineStore('chat', () => {
     fetchHistory,
     startDm,
     joinByShortCode,
+    removeRoom,
   };
 });

@@ -52,7 +52,7 @@ function formatDuration(seconds: number): string {
 
 <template>
   <form
-    class="flex items-center gap-2 p-3 border-t border-gray-200 ghost:border-ghost-muted bg-white ghost:bg-ghost-bg"
+    class="flex items-center gap-2 p-3 border-t border-gray-200 ghost:border-ghost-muted dark:border-dark-border bg-white ghost:bg-ghost-bg dark:bg-dark-bg"
     @submit.prevent="handleSend"
   >
     <!-- Hidden file input -->
@@ -67,7 +67,7 @@ function formatDuration(seconds: number): string {
     <!-- Image button -->
     <button
       type="button"
-      class="p-2 text-gray-400 hover:text-gray-600 ghost:text-ghost-text/40 ghost:hover:text-ghost-text/70 shrink-0"
+      class="p-2.5 md:p-2 text-gray-400 hover:text-gray-600 ghost:text-ghost-text/40 ghost:hover:text-ghost-text/70 dark:text-gray-500 dark:hover:text-dark-text shrink-0"
       title="Send image"
       @click="openFilePicker"
     >
@@ -93,14 +93,14 @@ function formatDuration(seconds: number): string {
       v-model="input"
       type="text"
       placeholder="Type a message..."
-      class="flex-1 px-3 py-2 rounded-lg border border-gray-300 ghost:border-ghost-muted ghost:bg-ghost-muted ghost:text-ghost-text text-sm focus:outline-none focus:ring-2 focus:ring-primary/50"
+      class="flex-1 px-3 py-2 rounded-lg border border-gray-300 ghost:border-ghost-muted ghost:bg-ghost-muted ghost:text-ghost-text dark:border-dark-border dark:bg-dark-muted dark:text-dark-text text-sm focus:outline-none focus:ring-2 focus:ring-primary/50"
       autocomplete="off"
     />
 
     <!-- Audio record button -->
     <button
       type="button"
-      class="p-2 shrink-0 rounded-lg transition-colors"
+      class="p-2.5 md:p-2 shrink-0 rounded-lg transition-colors"
       :class="isRecording
         ? 'text-red-500 hover:text-red-700 bg-red-50 ghost:bg-red-900/20'
         : 'text-gray-400 hover:text-gray-600 ghost:text-ghost-text/40 ghost:hover:text-ghost-text/70'"
@@ -117,7 +117,7 @@ function formatDuration(seconds: number): string {
       v-if="!isRecording"
       type="submit"
       :disabled="!input.trim()"
-      class="px-4 py-2 rounded-lg bg-primary text-white text-sm font-medium hover:bg-primary-hover disabled:opacity-40 disabled:cursor-not-allowed transition-colors shrink-0"
+      class="px-4 py-2.5 md:py-2 rounded-lg bg-primary text-white text-sm font-medium hover:bg-primary-hover disabled:opacity-40 disabled:cursor-not-allowed transition-colors shrink-0"
     >
       Send
     </button>

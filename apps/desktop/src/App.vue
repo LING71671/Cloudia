@@ -1,11 +1,13 @@
 <script setup lang="ts">
 import { useIdentityStore } from '@/stores/identity';
 import { useConnectionStore } from '@/stores/connection';
+import { useThemeStore } from '@/stores/theme';
 import ConnectionStatus from '@/components/common/ConnectionStatus.vue';
 import { onMounted } from 'vue';
 
 const identity = useIdentityStore();
 const connection = useConnectionStore();
+const theme = useThemeStore();
 
 onMounted(async () => {
   await identity.initialize();
@@ -14,7 +16,7 @@ onMounted(async () => {
 
 <template>
   <div
-    class="h-screen flex flex-col bg-gray-50 text-gray-900"
+    class="h-screen flex flex-col bg-gray-50 text-gray-900 dark:bg-dark-bg dark:text-dark-text"
     :class="{ 'ghost-mode': connection.currentRoomMode === 'ephemeral' }"
   >
     <ConnectionStatus v-if="connection.currentRoomId" />

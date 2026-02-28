@@ -183,6 +183,15 @@ export async function removeMember(db: D1Database, roomId: string, clientId: str
 
 // --- DM participants lookup ---
 
+export async function deleteRoom(db: D1Database, roomId: string): Promise<void> {
+  await db.batch([
+    db.prepare('DELETE FROM messages WHERE room_id = ?').bind(roomId),
+    db.prepare('DELETE FROM room_members WHERE room_id = ?').bind(roomId),
+    db.prepare('DELETE FROM dm_pairs WHERE room_id = ?').bind(roomId),
+    db.prepare('DELETE FROM rooms WHERE id = ?').bind(roomId),
+  ]);
+}
+
 export async function getDmParticipants(
   db: D1Database,
   roomId: string,

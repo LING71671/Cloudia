@@ -3,7 +3,7 @@ import type { CreateRoomRequest, CreateRoomResponse, ListRoomsResponse, RoomAcce
 import {
   type Env, listRooms, createRoom, getRoom, getMessages,
   generateShortCode, hashPassword, getRoomByShortCode,
-  findDmRoom, createDmPair,
+  findDmRoom, createDmPair, deleteRoom,
 } from '../db/queries';
 
 export const listRoomsHandler = async (c: Context<{ Bindings: Env }>) => {
@@ -125,4 +125,15 @@ export const getMessagesHandler = async (c: Context<{ Bindings: Env }>) => {
   const before = c.req.query('before') ? Number(c.req.query('before')) : undefined;
   const messages = await getMessages(c.env.DB, roomId, limit, before);
   return c.json({ messages });
+};
+
+export const deleteRoomHandler = async (c: Context<{ Bindings: Env }>) => {
+  const roomId = c.req.param('roomId');
+  const clientId = c.req.header('X-Client-ID');
+  if (!clientId) return c.json({ error: 'X-Client-ID required' }, 401);
+  const room = await getRoom(c.env.DB, roomId);
+  if (!room) return c.json({ error: 'Room not found' }, 404);
+  if (room.ownerClientId !== clientId) return c.json({ error: 'Forbidden' }, 403);
+  await deleteRoom(c.env.DB, roomId);
+  return c.json({ ok: true });
 };

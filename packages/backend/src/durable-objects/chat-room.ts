@@ -12,6 +12,7 @@ interface SessionMeta {
 }
 
 interface RoomState {
+  roomId?: string;
   mode: RoomMode;
   name: string;
   accessLevel: RoomAccessLevel;
@@ -52,6 +53,7 @@ export class ChatRoom extends DurableObject<{ DB: D1Database }> {
     const name = url.searchParams.get('name');
     if (!this.roomState && mode) {
       this.roomState = {
+        roomId: url.searchParams.get('roomId') ?? undefined,
         mode,
         name: name ?? 'Unnamed Room',
         accessLevel: (url.searchParams.get('accessLevel') as RoomAccessLevel) ?? 'public',
@@ -141,7 +143,8 @@ export class ChatRoom extends DurableObject<{ DB: D1Database }> {
       case 'answer':
       case 'ice-candidate':
       case 'key-exchange':
-        this.relay(msg);
+        // Broadcast signaling to all peers (not relay) so multi-peer calls work
+        this.broadcast(msg, ws);
         break;
       default:
         // Unknown type — broadcast anyway for extensibility
@@ -185,7 +188,21 @@ export class ChatRoom extends DurableObject<{ DB: D1Database }> {
   async alarm(): Promise<void> {
     // If still no connections after TTL, destroy the room
     if (this.sessions.size === 0) {
+      const roomId = this.roomState?.roomId;
       await this.ctx.storage.deleteAll();
+      // Also remove from D1 so the room disappears from the list
+      if (roomId) {
+        try {
+          await this.env.DB.batch([
+            this.env.DB.prepare('DELETE FROM messages WHERE room_id = ?').bind(roomId),
+            this.env.DB.prepare('DELETE FROM room_members WHERE room_id = ?').bind(roomId),
+            this.env.DB.prepare('DELETE FROM dm_pairs WHERE room_id = ?').bind(roomId),
+            this.env.DB.prepare('DELETE FROM rooms WHERE id = ?').bind(roomId),
+          ]);
+        } catch {
+          // Non-critical — room may already be deleted
+        }
+      }
     }
   }
 

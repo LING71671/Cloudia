@@ -7,8 +7,22 @@ export const iceServersHandler = (c: Context<{ Bindings: Env }>) => {
     iceServers: [
       { urls: 'stun:stun.l.google.com:19302' },
       { urls: 'stun:stun1.l.google.com:19302' },
-      // Production: add TURN servers from env vars
-      // { urls: 'turn:turn.example.com:3478', username: '...', credential: '...' },
+      // Public free TURN servers (OpenRelay)
+      {
+        urls: 'turn:openrelay.metered.ca:80',
+        username: 'openrelayproject',
+        credential: 'openrelayproject',
+      },
+      {
+        urls: 'turn:openrelay.metered.ca:443',
+        username: 'openrelayproject',
+        credential: 'openrelayproject',
+      },
+      {
+        urls: 'turn:openrelay.metered.ca:443?transport=tcp',
+        username: 'openrelayproject',
+        credential: 'openrelayproject',
+      },
     ],
   };
   return c.json(response);
