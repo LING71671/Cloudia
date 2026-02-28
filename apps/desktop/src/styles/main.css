@@ -1,5 +1,8 @@
 @import "tailwindcss";
 
+/* Use .dark class for dark mode (toggled by theme store) instead of media query */
+@custom-variant dark (&:where(.dark, .dark *));
+
 @theme {
   --color-primary: #4F46E5;
   --color-primary-hover: #4338CA;
